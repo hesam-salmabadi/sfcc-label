@@ -72,6 +72,8 @@ We will need to define which inputs are required, how missing moisture is handle
 
 From hourly probabilities or labels, derive `freeze_start_utc` and `freeze_end_utc` for each sensor and year. These dates should be a separate table because they summarize a season rather than an hour. We still need your definitions for the year boundary, minimum persistence, short thaw interruptions, multiple freeze cycles, and incomplete records. The model version and event-rule version should be recorded so results remain reproducible.
 
+For each cell and year, **retain all sensor-level event dates**. The agreed cell summary reports the **median, earliest, and latest** freeze-start dates, and separately the median, earliest, and latest freeze-end dates. Each has its own contributing sensor count because one event may be missing while the other is known. Missing dates are excluded from that event's statistics. These are summaries of sampled sensors, not dates on which the entire cell froze or thawed. The `aggregate_yearly_events` helper implements this summary for supplied per-sensor events; it does not determine the events themselves. Only combine sensors at comparable depths, and keep the method version in the output.
+
 ## 6. Place sensors on the northern EASE-Grid 2.0 and summarize each cell
 
 Map each sensor's WGS84 coordinates to the **Northern Hemisphere** EASE-Grid 2.0 projection (EPSG:6931). The 9 km grid has 2,000 rows and 2,000 columns, with 9,000 m cells. The package also supports the northern 25 km grid. A cell may contain zero, one, or several sensors. We should decide whether observations at different depths can enter the same cell-hour summary; the default scientific product should identify or filter depth before combining them.
@@ -82,7 +84,7 @@ Temperature and moisture can be summarized with a mean over valid sensors, with 
 
 Each sensor also has a probability vector. Take the mean of those vectors to describe the expected state share **among the sampled sensor locations**. For example, if the 7 frozen-labeled sensors each have `(0.9, 0.1, 0.0)` and the 3 transition-labeled sensors each have `(0.2, 0.8, 0.0)`, the mean vector is `(0.69, 0.31, 0.0)`. This differs from the hard-label shares `(0.70, 0.30, 0.0)`. Keep both; neither means “69% probability that the entire cell is frozen.” The code now calls the soft values `mean_sensor_p_*` and does not produce a cell label.
 
-These summaries only represent the cell area if the sensors adequately sample it. Ten sensors clustered at one site are not ten independent samples of a 9 km cell. Later, an explicit spatial model could use sensor positions, land cover, terrain, modeled soil variables, and calibration data to estimate **area fractions** or a **cell-level state probability**. That would be a separate, validated product with uncertainty and a method version. We should not fill an empty cell by averaging nearby sensor labels without such a model. Yearly event dates also need their own aggregation rule.
+These summaries only represent the cell area if the sensors adequately sample it. Ten sensors clustered at one site are not ten independent samples of a 9 km cell. Later, an explicit spatial model could use sensor positions, land cover, terrain, modeled soil variables, and calibration data to estimate **area fractions** or a **cell-level state probability**. That would be a separate, validated product with uncertainty and a method version. We should not fill an empty cell by averaging nearby sensor labels without such a model.
 
 ## 7. Let users request processed data
 
@@ -108,7 +110,7 @@ Today this filters records already loaded in memory. The future public interface
 | Metadata and hourly CSV contract | Defined and validated | Example source files and field mapping |
 | ISMN / AmeriFlux / local importers | Planned | Representative files and access rules |
 | Freeze/thaw probabilities | Processor interface only | Scientific labeling method and training/validation plan |
-| Annual freeze dates | Output record defined | Event definitions |
+| Annual freeze dates | Cell median, range, and counts implemented for supplied sensor events | Sensor-level event definitions |
 | EASE-Grid lookup | Working for northern 9 km and 25 km | Preferred product resolution |
 | Grid state summaries | Working counts, label shares, and mean sensor probabilities | Depth policy, sensor weighting, minimum coverage |
 | Full-coverage grid | Planned | Spatial model and independent validation |

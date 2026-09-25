@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from sfcc_label import (Observation, Prediction, SensorMetadata, aggregate_probabilities,
+from sfcc_label import (Observation, Prediction, SensorMetadata, YearlyFreezeEvent,
+                        aggregate_probabilities, aggregate_yearly_events,
                         get_processed_data, grid_cell, read_observations, write_observations)
 
 
@@ -46,3 +47,22 @@ def test_northern_grid_pole_and_invalid_resolution():
         grid_cell(90, 0, "10km")
     with pytest.raises(ValueError, match="Northern Hemisphere"):
         grid_cell(-1, 0)
+
+
+def test_yearly_event_summary_preserves_missing_end_dates():
+    stations = {key: SensorMetadata(key, "local", 45.5, -73.6)
+                for key in ("a", "b", "c")}
+    def date(day):
+        return datetime(2023, 10, day, tzinfo=timezone.utc)
+    events = [
+        YearlyFreezeEvent("a", 2023, date(1), datetime(2024, 4, 20, tzinfo=timezone.utc), "v1"),
+        YearlyFreezeEvent("b", 2023, date(10), None, "v1"),
+        YearlyFreezeEvent("c", 2023, date(31), datetime(2024, 4, 30, tzinfo=timezone.utc), "v1"),
+    ]
+    row, = aggregate_yearly_events(events, stations)
+    assert row.freeze_start.median_utc == date(10)
+    assert row.freeze_start.earliest_utc == date(1)
+    assert row.freeze_start.latest_utc == date(31)
+    assert row.freeze_start.sensor_count == 3
+    assert row.freeze_end.sensor_count == 2
+    assert row.freeze_end.median_utc == datetime(2024, 4, 25, tzinfo=timezone.utc)

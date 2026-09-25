@@ -58,6 +58,8 @@ cell = grid_cell(stations["example_sensor"].latitude,
 
 `aggregate_probabilities(predictions, stations, resolution="9km")` reports per-cell/hour sensor label counts, label shares, the **unweighted mean of sensor probability vectors**, and `sensor_count`. These describe sampled locations; they are not cell-wide state probabilities or area fractions. There is no single grid-cell label. The query helper `get_processed_data(...)` filters these in-memory rows by UTC interval and optional cell IDs. No online data service or native ISMN/AmeriFlux downloader is implemented yet.
 
+`aggregate_yearly_events(events, stations, resolution="9km")` summarizes supplied per-sensor freeze-start and freeze-end dates separately with the median, earliest, latest, and number of contributing sensors. Filter to comparable sensor depths before calling it. The package does not yet infer those dates from hourly data.
+
 ```bash
 sfcc-label validate metadata/sensors.csv data/standardized
 sfcc-label cell 45.5 -73.6 --resolution 9km
