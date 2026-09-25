@@ -21,14 +21,16 @@ Install the optional raster tools with `python -m pip install -e '.[test,geo]'` 
 
 ## Data contract
 
-`metadata/sensors.csv` has one row per **sensor**, not merely per site. Required fields:
+`metadata/sensors.csv` has one row per **depth-specific observation stream** (a temperature sensor optionally paired with moisture), not merely per site. Required fields:
 
 | Column | Meaning |
 | --- | --- |
 | `sensor_id` | Stable, unique, file-safe identifier, such as `ismn_network_station_5cm` |
 | `source` | `ismn`, `ameriflux`, or `local` |
 | `latitude`, `longitude` | WGS84 decimal degrees |
+| `site_id`, `network`, `station` | Site identity and original network/station names when known |
 | `depth_cm` | Measurement depth below surface, if known; otherwise `NaN` |
+| `depth_from_cm`, `depth_to_cm` | Original measurement interval; equal for a point sensor |
 | `raw_variable`, `raw_unit` | Native sensor signal name and unit; use `NaN` when unavailable |
 | `source_id`, `source_url` | Original station identifier and provenance link |
 | `timezone_original` | Original time zone, if known; standardized times are always UTC |
@@ -46,6 +48,25 @@ timestamp_utc,soil_temperature_c,soil_moisture_m3_m3,raw_value
 ```
 
 Each timestamp marks an hourly UTC slot. Use literal `NaN` for unavailable measurements; do not interpret missing soil moisture as zero. A missing hour can be represented by an all-`NaN` row. Retain source files separately for traceability. The raw value has no global unit; `raw_variable` and `raw_unit` in metadata define it for each sensor. A sensor can have no soil moisture series at all.
+
+The CSV retains finite source values even when they fall outside a physical range. QA/QC can later use the source flags to accept, mask, or investigate them. This avoids silently discarding flagged anomalies during harmonization.
+
+## ISMN header+values import
+
+The importer reads the ISMN `Data_separate_files_header_...` export. ISMN already [harmonizes UTC timestamps and volumetric soil-moisture units](https://ismn.earth/data/harmonization/). The current step joins `ts` and `sm` at identical UTC hours and copies values without a new QA/QC decision. ISMN and provider flags go into `data/flags/ismn/<sensor_id>.csv.gz`, aligned with the four-column observation CSV; the raw sensor-output column is `NaN` because this ISMN export does not contain frequency/count/permittivity measurements.
+
+```bash
+sfcc-label index-ismn /path/to/ISMN-export
+sfcc-label import-ismn /path/to/ISMN-export \
+  --start 2020-01-01 --end 2021-01-01 \
+  --network ARM --station Anthony --paired-only --max-sensors 3
+```
+
+`index-ismn` reads filenames and headers, then creates local-only `metadata/private/ismn_sites.csv`, `ismn_sensors.csv`, `ismn_pairing.csv`, and `ismn_scan_issues.csv`. Every metadata sensor has a below-ground soil-temperature stream; moisture-only streams remain visible in the pairing report but are not imported as standalone classifier inputs. Coordinates come from ISMN file headers. Distinct instrument replacements and redundant probes keep distinct sensor IDs. A logical record can pair two physical instruments. Pairing uses the same instrument/position first, then a unique position match, then a unique pair at the same exact depth bounds. Ambiguous unmatched temperature streams remain temperature-only. The pairing report contains the original relative file paths and method for review. The supplied ISMN export also includes a `FLUXNET-AMERIFLUX` network; a later direct AmeriFlux import will need duplicate-site checks.
+
+`import-ismn` writes one CSV per selected sensor to `data/standardized/` and keeps the original flags in compressed sidecars. `--start` is inclusive and `--end` exclusive. It fills missing hours with `NaN` between the first and last available hour in the requested window. Existing outputs are not overwritten. Use filters to make bounded runs; this repository's full 2010–2026 export is too large to expand safely on the current workspace disk.
+
+The inspected export indexed **1,728 northern sites and 11,774 temperature-bearing sensors**. Three negative-depth files were explicitly excluded and recorded; a three-sensor 2020 pilot produced 26,352 hourly rows. Local data tables and observations are Git-ignored. [ISMN terms](https://ismn.earth/terms-and-conditions) prohibit onward distribution of downloaded data, so the public repository contains importer code and schema, not ISMN-derived records. Cite both ISMN and contributing networks in scientific outputs.
 
 `data/processed/<sensor_id>.csv`, when the processor is implemented, will contain `timestamp_utc,p_frozen,p_transition,p_thawed,label,model_version`. The three probabilities must be finite, within `[0, 1]`, and sum to one (within tolerance). `label` is the highest probability class; ties use the class order frozen, transition, thawed. An unknown hour should have three `NaN` probabilities and an empty label, rather than a fabricated prediction. Annual events will be stored separately with `sensor_id,year,freeze_start_utc,freeze_end_utc,model_version` and definitions supplied with the algorithm. A year is a UTC calendar year until the event definition is specified.
 
@@ -95,10 +116,12 @@ Grid dimensions and origins follow the [NSIDC EASE-Grid guide](https://nsidc.org
 
 ```text
 metadata/sensors.csv          sensor registry and optional enrichment
+metadata/private/             local ISMN site/sensor/pairing tables (ignored)
 metadata/sensor_landcover.csv annual 500 m MODIS class per sensor
 metadata/landcover_screen.csv annual sensor-to-cell match audit
 data/raw/                     original source files (ignored)
 data/standardized/            one hourly CSV per sensor (ignored)
+data/flags/                   source quality-flag sidecars (ignored)
 data/processed/               model output (ignored)
 data/landcover/               yearly 9 km and 25 km EASE rasters (ignored)
 src/sfcc_label/               data contract, grid, aggregation, CLI

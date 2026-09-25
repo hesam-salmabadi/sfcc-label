@@ -1,10 +1,14 @@
 """Small command-line entry points for stage-one validation and grid lookup."""
 
 import argparse
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .grid import grid_cell
 from .io import load_metadata, read_observations
+from .ismn import (import_ismn_pair, pair_ismn, scan_ismn,
+                   write_ismn_inventory)
 from .landcover import (read_land_cover_screen, read_sensor_land_cover,
                         write_land_cover_screen, write_sensor_land_cover)
 from .landcover_raster import (build_igbp_grid, sample_sensor_land_cover,
@@ -31,9 +35,59 @@ def main() -> None:
                            default=Path("metadata/sensor_landcover.csv"))
     landcover.add_argument("--screen-table", type=Path,
                            default=Path("metadata/landcover_screen.csv"))
+    index = subparsers.add_parser("index-ismn", help="inventory northern ISMN sites and depth pairs")
+    index.add_argument("root", type=Path)
+    index.add_argument("--output-dir", type=Path, default=Path("metadata/private"))
+    importer = subparsers.add_parser("import-ismn", help="normalize a bounded ISMN time window")
+    importer.add_argument("root", type=Path)
+    importer.add_argument("--start", required=True, help="inclusive UTC date, YYYY-MM-DD")
+    importer.add_argument("--end", required=True, help="exclusive UTC date, YYYY-MM-DD")
+    importer.add_argument("--network", help="optional exact network name")
+    importer.add_argument("--station", help="optional exact station name")
+    importer.add_argument("--paired-only", action="store_true",
+                          help="only import sensors with both temperature and moisture")
+    importer.add_argument("--max-sensors", type=int, help="limit output for a pilot run")
+    importer.add_argument("--observations-dir", type=Path,
+                          default=Path("data/standardized"))
+    importer.add_argument("--flags-dir", type=Path, default=Path("data/flags/ismn"))
     args = parser.parse_args()
     if args.command == "cell":
         print(grid_cell(args.latitude, args.longitude, args.resolution).cell_id)
+    elif args.command == "index-ismn":
+        files, issues = scan_ismn(args.root)
+        pairs = pair_ismn(files)
+        write_ismn_inventory(args.root, args.output_dir, pairs, issues)
+        print(f"Indexed {sum(pair.temperature is not None for pair in pairs)} northern "
+              f"temperature sensors; {len(issues)} scan issues")
+    elif args.command == "import-ismn":
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.start) or \
+                not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.end):
+            raise ValueError("start and end must be UTC dates, YYYY-MM-DD")
+        start = datetime.fromisoformat(args.start).replace(tzinfo=timezone.utc)
+        end = datetime.fromisoformat(args.end).replace(tzinfo=timezone.utc)
+        if start.time() != datetime.min.time() or end.time() != datetime.min.time():
+            raise ValueError("start and end must be UTC dates, YYYY-MM-DD")
+        if args.max_sensors is not None and args.max_sensors <= 0:
+            raise ValueError("max-sensors must be positive")
+        files, issues = scan_ismn(args.root)
+        errors = [issue for issue in issues if not issue[1].startswith("excluded:")]
+        if errors:
+            raise ValueError(f"{len(errors)} ISMN files could not be parsed; run index-ismn first")
+        pairs = [pair for pair in pair_ismn(files)
+                 if pair.temperature is not None
+                 and (args.network is None or pair.depth_key[0] == args.network)
+                 and (args.station is None or pair.depth_key[1] == args.station)
+                 and (not args.paired_only or pair.moisture is not None)]
+        if args.max_sensors is not None:
+            pairs = pairs[:args.max_sensors]
+        rows = 0
+        imported = 0
+        for pair in pairs:
+            count = import_ismn_pair(pair, start, end,
+                                     args.observations_dir, args.flags_dir)
+            rows += count
+            imported += count > 0
+        print(f"Imported {imported} sensors and {rows} hourly rows")
     elif args.command == "prepare-landcover":
         sensors = load_metadata(args.metadata)
         old_sensor = read_sensor_land_cover(args.sensor_table) if args.sensor_table.exists() else {}

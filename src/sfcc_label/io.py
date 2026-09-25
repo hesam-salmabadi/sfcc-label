@@ -56,12 +56,23 @@ def load_metadata(path: str | Path) -> dict[str, SensorMetadata]:
         data = {name: _optional_text(row[name]) for name in METADATA_COLUMNS}
         data["latitude"] = float(row["latitude"])
         data["longitude"] = float(row["longitude"])
-        data["depth_cm"] = _optional_float(row["depth_cm"])
+        for name in ("depth_cm", "depth_from_cm", "depth_to_cm"):
+            data[name] = _optional_float(row[name])
         sensor = SensorMetadata(**data)
         if sensor.sensor_id in sensors:
             raise ValueError(f"duplicate sensor_id: {sensor.sensor_id}")
         sensors[sensor.sensor_id] = sensor
     return sensors
+
+
+def write_metadata(path: str | Path, sensors: list[SensorMetadata]) -> None:
+    """Write the common sensor registry without source-specific side tables."""
+    with Path(path).open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(METADATA_COLUMNS)
+        for sensor in sensors:
+            writer.writerow(tuple("NaN" if getattr(sensor, name) is None
+                                  else getattr(sensor, name) for name in METADATA_COLUMNS))
 
 
 def read_observations(path: str | Path) -> list[Observation]:
@@ -72,8 +83,6 @@ def read_observations(path: str | Path) -> list[Observation]:
         if previous is not None and timestamp - previous != timedelta(hours=1):
             raise ValueError(f"{path}: timestamps must be consecutive UTC hours")
         moisture = _optional_float(row["soil_moisture_m3_m3"])
-        if moisture is not None and not 0 <= moisture <= 1:
-            raise ValueError(f"{path}: soil moisture must be a fraction in [0, 1]")
         observations.append(Observation(timestamp, _optional_float(row["soil_temperature_c"]),
                                         moisture, _optional_float(row["raw_value"])))
         previous = timestamp
@@ -92,8 +101,6 @@ def write_observations(path: str | Path, observations: list[Observation]) -> Non
         for value in (observation.soil_temperature_c, observation.soil_moisture_m3_m3, observation.raw_value):
             if value is not None and not isfinite(value):
                 raise ValueError("measurement must be finite or missing")
-        if observation.soil_moisture_m3_m3 is not None and not 0 <= observation.soil_moisture_m3_m3 <= 1:
-            raise ValueError("soil moisture must be a fraction in [0, 1]")
         previous = timestamp
     with path.open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)

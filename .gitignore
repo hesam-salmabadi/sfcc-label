@@ -9,7 +9,11 @@ data/raw/*
 data/standardized/*
 data/processed/*
 data/landcover/*
+data/flags/*
+metadata/private/*
 !data/raw/.gitkeep
 !data/standardized/.gitkeep
 !data/processed/.gitkeep
 !data/landcover/.gitkeep
+!data/flags/.gitkeep
+!metadata/private/.gitkeep

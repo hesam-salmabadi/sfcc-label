@@ -30,9 +30,11 @@ flowchart LR
 
 ## 1. Collect and preserve source data
 
-Keep the original ISMN, AmeriFlux, and local files in `data/raw/`, along with source names, versions, citations, and any use restrictions. We should build one importer per source format after we have representative files. The importer should preserve quality flags and record any calibration or conversion used to obtain soil moisture.
+Keep the original ISMN, AmeriFlux, and local files in a local source archive, along with source names, versions, citations, and any use restrictions. The first importer now reads the supplied ISMN header+values export from its existing location. It indexes northern sites, pairs temperature and moisture streams by exact depth and instrument identity where possible, and writes bounded hourly UTC CSVs. It preserves original flags in compressed sidecars without making a new QA/QC decision. The importer for AmeriFlux and local data still needs representative files.
 
-Each physical sensor gets a stable `sensor_id`. Multiple depths at one site are separate sensors because their temperature, moisture, and freeze/thaw behavior may differ. Metadata lives in `metadata/sensors.csv` and includes WGS84 latitude/longitude, depth, source identifiers, the meaning and unit of the raw channel, and optional fields for land cover or modeled soil properties. Enrichment values should keep their dataset name/version and method so they can be refreshed later.
+Each depth-specific observation stream gets a stable `sensor_id`; temperature and moisture can come from separate physical probes. Multiple depths at one site stay separate because their measurements and freeze/thaw behavior may differ. Metadata lives in `metadata/sensors.csv` and includes WGS84 latitude/longitude, depth, source identifiers, the meaning and unit of the raw channel, and optional fields for land cover or modeled soil properties. Enrichment values should keep their dataset name/version and method so they can be refreshed later.
+
+For ISMN, the populated site/sensor tables are under Git-ignored `metadata/private/`, while `metadata/sensors.csv` remains the public schema template. The site table has one latitude/longitude per site; the sensor table repeats those coordinates with depth bounds and a stable site ID. The pairing report records exactly which `ts` and `sm` source files produced each sensor record. Replacements and redundant probes remain separate. Soil-moisture-only streams are indexed but not turned into classifier inputs. The source export is about 22 GB and the workspace has limited free space, so time-series imports are intentionally bounded by requested dates and sensor filters.
 
 ## 2. Standardize to hourly observations
 
@@ -47,11 +49,11 @@ Create `data/standardized/<sensor_id>.csv` with exactly one record per UTC hour 
 
 Unavailable measurements are `NaN`. If an hour is absent from the source, include an all-`NaN` hourly row and retain the original source record separately. We should document each importer's time-zone conversion and hourly resampling rule. The current validator checks UTC timestamps, consecutive hourly rows, and numeric ranges; it does not yet import or resample source data.
 
-The single `raw_value` column covers one native channel per sensor, with its name and unit in metadata. If a sensor supplies multiple useful raw channels, we should extend the schema explicitly, for example with a separate long-format raw-observations table. We should settle this after seeing actual files.
+The single `raw_value` column covers one native channel per sensor, with its name and unit in metadata. The inspected ISMN export includes harmonized soil moisture and temperature but no raw frequency/count signal, so its `raw_value` is `NaN`. If another source supplies multiple useful raw channels, we should extend the schema explicitly, for example with a separate long-format raw-observations table.
 
 ## 3. Validate and enrich
 
-Before modeling, verify unique sensor IDs, coordinates, units, depth, hourly continuity, duplicate timestamps, and missingness. Keep source quality flags for filtering. Add optional modeled soil variables to metadata with provenance. Generate a per-sensor coverage report so we know whether temperature, moisture, or raw measurements are sufficient for classification.
+Before modeling, verify unique sensor IDs, coordinates, units, depth, hourly continuity, duplicate timestamps, and missingness. Keep source quality flags for later filtering. The ISMN importer currently preserves flagged finite values and does not perform new anomaly QA/QC; that later stage needs explicit acceptance and masking rules. Add optional modeled soil variables to metadata with provenance. Generate a per-sensor coverage report so we know whether temperature, moisture, or raw measurements are sufficient for classification.
 
 For land-cover representativeness, use each year's MODIS MCD12Q1 Collection 6.1 `LC_Type1` IGBP map. Sample the native 500 m pixel at every sensor location and save the class by sensor and year in `metadata/sensor_landcover.csv`. From that same annual source, create a dominant-class raster on each supported northern EASE grid (9 km and 25 km). For each sensor, year, and resolution, compare its 500 m class to its cell's dominant class. An exact match is eligible; a mismatch or missing class is excluded from later **aggregation**, with the reason recorded in `metadata/landcover_screen.csv`. Do not delete the original station observations or predictions. This is a requested screening rule; class agreement alone does not prove that a sensor represents every condition in the cell.
 
@@ -116,6 +118,7 @@ Today this filters records already loaded in memory. The future public interface
 | Part | Current state | Next input needed |
 | --- | --- | --- |
 | Metadata and hourly CSV contract | Defined and validated | Example source files and field mapping |
+| ISMN harmonization | Northern site/sensor index and bounded hourly importer working locally | Decide full-output storage location and review ambiguous depth pairing |
 | MODIS land-cover screening | Annual metadata, grid builder, and exact-match gate implemented | Annual MCD12Q1 IGBP mosaics and sensor coordinates |
 | ISMN / AmeriFlux / local importers | Planned | Representative files and access rules |
 | Freeze/thaw probabilities | Processor interface only | Scientific labeling method and training/validation plan |

@@ -13,7 +13,12 @@ class SensorMetadata:
     source: str
     latitude: float
     longitude: float
+    site_id: str | None = None
+    network: str | None = None
+    station: str | None = None
     depth_cm: float | None = None
+    depth_from_cm: float | None = None
+    depth_to_cm: float | None = None
     raw_variable: str | None = None
     raw_unit: str | None = None
     source_id: str | None = None
@@ -38,6 +43,12 @@ class SensorMetadata:
             raise ValueError("longitude must be between -180 and 180")
         if self.depth_cm is not None and (not isfinite(self.depth_cm) or self.depth_cm < 0):
             raise ValueError("depth_cm must be nonnegative or missing")
+        for value in (self.depth_from_cm, self.depth_to_cm):
+            if value is not None and (not isfinite(value) or value < 0):
+                raise ValueError("depth bounds must be nonnegative or missing")
+        if (self.depth_from_cm is not None and self.depth_to_cm is not None
+                and self.depth_from_cm > self.depth_to_cm):
+            raise ValueError("depth_from_cm must not exceed depth_to_cm")
 
 
 @dataclass(frozen=True)
