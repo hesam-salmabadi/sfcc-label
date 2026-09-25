@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 
 from .grid import grid_cell
+from .landcover import LandCoverScreen, is_representative
 from .models import Prediction, SensorMetadata, YearlyFreezeEvent
 
 
@@ -53,8 +54,9 @@ class GriddedYearlyEvents:
 
 def aggregate_probabilities(predictions: list[Prediction],
                             sensors: dict[str, SensorMetadata],
+                            screens: dict[tuple[str, int, str], LandCoverScreen],
                             resolution: str = "9km") -> list[GriddedPrediction]:
-    """Summarize sampled sensor states by cell/hour, without asserting a cell label."""
+    """Summarize only land-cover-matched sensors by cell/hour."""
     groups = defaultdict(list)
     seen = set()
     for prediction in predictions:
@@ -72,6 +74,9 @@ def aggregate_probabilities(predictions: list[Prediction],
             continue
         sensor = sensors[prediction.sensor_id]
         cell = grid_cell(sensor.latitude, sensor.longitude, resolution)
+        if not is_representative(prediction.sensor_id, prediction.timestamp_utc.year,
+                                 resolution, cell.cell_id, screens):
+            continue
         groups[(cell.cell_id, prediction.timestamp_utc, prediction.model_version)].append(prediction)
     result = []
     for (cell_id, timestamp, version), records in sorted(groups.items()):
@@ -99,6 +104,7 @@ def _event_date_summary(dates: list[datetime]) -> EventDateSummary:
 
 def aggregate_yearly_events(events: list[YearlyFreezeEvent],
                             sensors: dict[str, SensorMetadata],
+                            screens: dict[tuple[str, int, str], LandCoverScreen],
                             resolution: str = "9km") -> list[GriddedYearlyEvents]:
     """Summarize per-sensor event dates; missing start/end dates have separate counts.
 
@@ -119,6 +125,9 @@ def aggregate_yearly_events(events: list[YearlyFreezeEvent],
                 raise ValueError("event dates must be timezone-aware UTC")
         sensor = sensors[event.sensor_id]
         cell = grid_cell(sensor.latitude, sensor.longitude, resolution)
+        if not is_representative(event.sensor_id, event.year, resolution,
+                                 cell.cell_id, screens):
+            continue
         groups[(cell.cell_id, event.year, event.model_version)].append(event)
     return [
         GriddedYearlyEvents(

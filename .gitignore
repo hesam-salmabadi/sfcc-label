@@ -8,6 +8,8 @@ build/
 data/raw/*
 data/standardized/*
 data/processed/*
+data/landcover/*
 !data/raw/.gitkeep
 !data/standardized/.gitkeep
 !data/processed/.gitkeep
+!data/landcover/.gitkeep

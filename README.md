@@ -17,6 +17,8 @@ python -m pip install -e '.[test]'
 python -m pytest
 ```
 
+Install the optional raster tools with `python -m pip install -e '.[test,geo]'` when preparing MODIS land cover.
+
 ## Data contract
 
 `metadata/sensors.csv` has one row per **sensor**, not merely per site. Required fields:
@@ -31,7 +33,9 @@ python -m pytest
 | `source_id`, `source_url` | Original station identifier and provenance link |
 | `timezone_original` | Original time zone, if known; standardized times are always UTC |
 | `soil_moisture_method` | Original conversion or calibration description, if known |
-| `land_cover`, `land_cover_source`, `modeled_soil_variable`, `modeled_soil_value`, `modeled_soil_unit`, `modeled_soil_source` | Optional enrichment with source and meaning kept alongside the value |
+| `land_cover`, `land_cover_source`, `modeled_soil_variable`, `modeled_soil_value`, `modeled_soil_unit`, `modeled_soil_source` | Optional general enrichment with source and meaning kept alongside the value |
+
+Annual MODIS 500 m land cover is stored separately in `metadata/sensor_landcover.csv` as `sensor_id,year,igbp_class,product,collection`; one sensor can have a different class in different years. It uses the `LC_Type1` IGBP legend from MCD12Q1 Collection 6.1. The table is empty until source rasters and sensor coordinates are supplied. The general `land_cover` field in `sensors.csv` is not used for the representativeness gate.
 
 `data/standardized/<sensor_id>.csv` contains exactly these columns:
 
@@ -56,9 +60,21 @@ cell = grid_cell(stations["example_sensor"].latitude,
                  stations["example_sensor"].longitude, resolution="9km")
 ```
 
-`aggregate_probabilities(predictions, stations, resolution="9km")` reports per-cell/hour sensor label counts, label shares, the **unweighted mean of sensor probability vectors**, and `sensor_count`. These describe sampled locations; they are not cell-wide state probabilities or area fractions. There is no single grid-cell label. The query helper `get_processed_data(...)` filters these in-memory rows by UTC interval and optional cell IDs. No online data service or native ISMN/AmeriFlux downloader is implemented yet.
+`aggregate_probabilities(predictions, stations, screens, resolution="9km")` reports per-cell/hour sensor label counts, label shares, the **unweighted mean of sensor probability vectors**, and `sensor_count`. The `screens` argument is required: only sensors whose annual 500 m MODIS IGBP class exactly matches their EASE cell's dominant IGBP class enter the summary. Missing classes or screening records exclude the sensor; observations are retained. These summaries describe sampled locations, not cell-wide state probabilities or area fractions. There is no single grid-cell label. The query helper `get_processed_data(...)` filters these in-memory rows by UTC interval and optional cell IDs. No online data service or native ISMN/AmeriFlux downloader is implemented yet.
 
-`aggregate_yearly_events(events, stations, resolution="9km")` summarizes supplied per-sensor freeze-start and freeze-end dates separately with the median, earliest, latest, and number of contributing sensors. Filter to comparable sensor depths before calling it. The package does not yet infer those dates from hourly data.
+`aggregate_yearly_events(events, stations, screens, resolution="9km")` applies the same land-cover gate, then summarizes supplied per-sensor freeze-start and freeze-end dates separately with the median, earliest, latest, and number of contributing sensors. Filter to comparable sensor depths before calling it. The package does not yet infer those dates from hourly data.
+
+## MODIS land-cover preparation
+
+Prepare a georeferenced, **one-band** raster or VRT mosaic of MCD12Q1.061 `LC_Type1` (IGBP classes, nominally 500 m) for each requested year. The command samples each sensor's native pixel and creates dominant-class grids at both supported EASE-Grid resolutions using categorical mode resampling:
+
+```bash
+sfcc-label prepare-landcover 2020 data/raw/MCD12Q1_2020_LC_Type1.vrt
+```
+
+Outputs are `metadata/sensor_landcover.csv`, `metadata/landcover_screen.csv`, and `data/landcover/ease2_n_{9km,25km}_2020.tif`. The screening table records the sensor class, cell class, match decision, and exclusion reason by year and resolution. Run once per year; the command refuses to overwrite an existing year. It expects a complete, correctly identified source mosaic and does not download MODIS granules or apply the product QA layer yet. A missing or invalid IGBP class is excluded from aggregation, never treated as a match. Source tiles and generated rasters are not committed.
+
+The cited [SMOS study](https://essd.copernicus.org/articles/17/5337/2025/) used ESA CCI land cover at 300 m and a more involved representativeness test. This project follows the requested MODIS 500 m exact-class rule. The [MODIS Collection 6.1 guide](https://lpdaac.usgs.gov/documents/1409/MCD12_User_Guide_V61.pdf) documents the annual IGBP layer and its codes.
 
 ```bash
 sfcc-label validate metadata/sensors.csv data/standardized
@@ -79,9 +95,12 @@ Grid dimensions and origins follow the [NSIDC EASE-Grid guide](https://nsidc.org
 
 ```text
 metadata/sensors.csv          sensor registry and optional enrichment
+metadata/sensor_landcover.csv annual 500 m MODIS class per sensor
+metadata/landcover_screen.csv annual sensor-to-cell match audit
 data/raw/                     original source files (ignored)
 data/standardized/            one hourly CSV per sensor (ignored)
 data/processed/               model output (ignored)
+data/landcover/               yearly 9 km and 25 km EASE rasters (ignored)
 src/sfcc_label/               data contract, grid, aggregation, CLI
 tests/                        contract and grid checks
 ```

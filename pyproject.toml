@@ -20,6 +20,7 @@ classifiers = [
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
+geo = ["rasterio>=1.4,<2"]
 
 [project.scripts]
 sfcc-label = "sfcc_label.cli:main"

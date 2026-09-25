@@ -9,8 +9,11 @@ flowchart LR
     C[Our sensors] --> D
     D --> E[Sensor metadata registry]
     D --> F[One hourly UTC CSV per sensor]
-    E --> G[Validation and enrichment]
+    E --> G[Validation and MODIS land-cover screening]
     F --> G
+    Q[Annual MODIS MCD12Q1 500 m IGBP] --> G
+    Q --> R[9 km and 25 km northern EASE land-cover grids]
+    R --> G
     G --> H[Versioned freeze/thaw processor]
     H --> I[Hourly state probabilities]
     H --> J[Yearly freeze start and end dates]
@@ -48,12 +51,17 @@ The single `raw_value` column covers one native channel per sensor, with its nam
 
 ## 3. Validate and enrich
 
-Before modeling, verify unique sensor IDs, coordinates, units, depth, hourly continuity, duplicate timestamps, and missingness. Keep source quality flags for filtering. Add optional land cover and modeled soil variables to metadata with provenance. Generate a per-sensor coverage report so we know whether temperature, moisture, or raw measurements are sufficient for classification.
+Before modeling, verify unique sensor IDs, coordinates, units, depth, hourly continuity, duplicate timestamps, and missingness. Keep source quality flags for filtering. Add optional modeled soil variables to metadata with provenance. Generate a per-sensor coverage report so we know whether temperature, moisture, or raw measurements are sufficient for classification.
+
+For land-cover representativeness, use each year's MODIS MCD12Q1 Collection 6.1 `LC_Type1` IGBP map. Sample the native 500 m pixel at every sensor location and save the class by sensor and year in `metadata/sensor_landcover.csv`. From that same annual source, create a dominant-class raster on each supported northern EASE grid (9 km and 25 km). For each sensor, year, and resolution, compare its 500 m class to its cell's dominant class. An exact match is eligible; a mismatch or missing class is excluded from later **aggregation**, with the reason recorded in `metadata/landcover_screen.csv`. Do not delete the original station observations or predictions. This is a requested screening rule; class agreement alone does not prove that a sensor represents every condition in the cell.
+
+Because MODIS land cover is annual, eligibility is year-specific. The raster step needs one correctly georeferenced IGBP mosaic per year. If no MODIS map exists for an observation year, that sensor-year is not eligible until a documented fallback-year policy is supplied. The current code uses categorical mode resampling to create the coarser EASE grid class and supports both northern resolutions. It does not download NASA granules or use MODIS QA flags yet. The [cited SMOS paper](https://essd.copernicus.org/articles/17/5337/2025/) used ESA CCI 300 m land cover and additional coverage checks, so its exact method is distinct from this MODIS class-match rule.
 
 The available command is:
 
 ```bash
 sfcc-label validate metadata/sensors.csv data/standardized
+sfcc-label prepare-landcover 2020 data/raw/MCD12Q1_2020_LC_Type1.vrt
 ```
 
 ## 4. Classify each sensor hour
@@ -72,13 +80,13 @@ We will need to define which inputs are required, how missing moisture is handle
 
 From hourly probabilities or labels, derive `freeze_start_utc` and `freeze_end_utc` for each sensor and year. These dates should be a separate table because they summarize a season rather than an hour. We still need your definitions for the year boundary, minimum persistence, short thaw interruptions, multiple freeze cycles, and incomplete records. The model version and event-rule version should be recorded so results remain reproducible.
 
-For each cell and year, **retain all sensor-level event dates**. The agreed cell summary reports the **median, earliest, and latest** freeze-start dates, and separately the median, earliest, and latest freeze-end dates. Each has its own contributing sensor count because one event may be missing while the other is known. Missing dates are excluded from that event's statistics. These are summaries of sampled sensors, not dates on which the entire cell froze or thawed. The `aggregate_yearly_events` helper implements this summary for supplied per-sensor events; it does not determine the events themselves. Only combine sensors at comparable depths, and keep the method version in the output.
+For each cell and year, **retain all sensor-level event dates**. After land-cover screening, the agreed cell summary reports the **median, earliest, and latest** freeze-start dates, and separately the median, earliest, and latest freeze-end dates. Each has its own contributing sensor count because one event may be missing while the other is known. Missing dates are excluded from that event's statistics. These are summaries of sampled sensors, not dates on which the entire cell froze or thawed. The `aggregate_yearly_events` helper implements this summary for supplied per-sensor events; it does not determine the events themselves. Only combine sensors at comparable depths, and keep the method version in the output.
 
 ## 6. Place sensors on the northern EASE-Grid 2.0 and summarize each cell
 
 Map each sensor's WGS84 coordinates to the **Northern Hemisphere** EASE-Grid 2.0 projection (EPSG:6931). The 9 km grid has 2,000 rows and 2,000 columns, with 9,000 m cells. The package also supports the northern 25 km grid. A cell may contain zero, one, or several sensors. We should decide whether observations at different depths can enter the same cell-hour summary; the default scientific product should identify or filter depth before combining them.
 
-Temperature and moisture can be summarized with a mean over valid sensors, with separate counts for each variable, provided their depth and measurement meaning are comparable. The mean should be accompanied by a spread (for example standard deviation or quantiles) and source coverage. Missing moisture must not reduce the temperature count.
+Temperature and moisture can be summarized with a mean over **land-cover-eligible** valid sensors, with separate counts for each variable, provided their depth and measurement meaning are comparable. The mean should be accompanied by a spread (for example standard deviation or quantiles) and source coverage. Missing moisture must not reduce the temperature count.
 
 **A categorical state is different.** If 7 of 10 sensors are labeled frozen and 3 transition, the observed label shares are 0.70 frozen, 0.30 transition, and 0 thawed. The cell is mixed in the sampled locations; assigning it a single frozen label would hide that heterogeneity. Retain the counts as well as the shares.
 
@@ -108,6 +116,7 @@ Today this filters records already loaded in memory. The future public interface
 | Part | Current state | Next input needed |
 | --- | --- | --- |
 | Metadata and hourly CSV contract | Defined and validated | Example source files and field mapping |
+| MODIS land-cover screening | Annual metadata, grid builder, and exact-match gate implemented | Annual MCD12Q1 IGBP mosaics and sensor coordinates |
 | ISMN / AmeriFlux / local importers | Planned | Representative files and access rules |
 | Freeze/thaw probabilities | Processor interface only | Scientific labeling method and training/validation plan |
 | Annual freeze dates | Cell median, range, and counts implemented for supplied sensor events | Sensor-level event definitions |
