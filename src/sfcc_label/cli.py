@@ -7,7 +7,11 @@ from concurrent.futures import ProcessPoolExecutor
 from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
+from zipfile import BadZipFile
 
+from .ameriflux import (import_ameriflux_site, pair_ameriflux,
+                        read_measurement_heights, scan_ameriflux,
+                        write_ameriflux_inventory)
 from .grid import grid_cell
 from .io import load_metadata, read_observations
 from .ismn import (import_ismn_pair, pair_ismn, scan_ismn,
@@ -30,6 +34,23 @@ def _import_ismn_task(task):
         count = import_ismn_pair(pair, start, end, observations_dir, flags_dir)
         return ("imported" if count else "no_data"), count, ""
     except ValueError as exc:
+        return "error", 0, str(exc)
+
+
+def _import_ameriflux_task(task):
+    archive, sensors, observations_dir, flags_dir, start, end, skip_existing = task
+    paths = [(observations_dir / f"{sensor.sensor_id}.csv",
+              flags_dir / f"{sensor.sensor_id}.csv.gz") for sensor in sensors]
+    if any(obs.exists() or flag.exists() for obs, flag in paths):
+        if skip_existing and all(obs.exists() and flag.exists() for obs, flag in paths):
+            return "skipped_existing", 0, ""
+        return "error", 0, "existing or incomplete site output"
+    try:
+        hours, invalid_cells = import_ameriflux_site(archive, sensors, observations_dir,
+                                                     flags_dir, start=start, end=end)
+        detail = f"invalid_numeric_cells={invalid_cells}" if invalid_cells else ""
+        return ("imported" if hours else "no_data"), hours * len(sensors), detail
+    except (ValueError, OSError, BadZipFile, csv.Error, IndexError, UnicodeError) as exc:
         return "error", 0, str(exc)
 
 
@@ -74,6 +95,23 @@ def main() -> None:
                           help="skip sensors with both output files already present")
     importer.add_argument("--workers", type=int, default=1,
                           help="parallel sensor imports (default: 1)")
+    amf_index = subparsers.add_parser("index-ameriflux", help="inventory northern AmeriFlux BASE TS/SWC")
+    amf_index.add_argument("root", type=Path)
+    amf_index.add_argument("--height-file", required=True, type=Path)
+    amf_index.add_argument("--output-dir", type=Path, default=Path("metadata/private"))
+    amf_import = subparsers.add_parser("import-ameriflux", help="harmonize AmeriFlux BASE to UTC hourly CSVs")
+    amf_import.add_argument("root", type=Path)
+    amf_import.add_argument("--height-file", required=True, type=Path)
+    amf_import.add_argument("--site", help="optional exact AmeriFlux site code")
+    amf_import.add_argument("--max-sites", type=int)
+    amf_import.add_argument("--start", help="inclusive UTC date, YYYY-MM-DD")
+    amf_import.add_argument("--end", help="exclusive UTC date, YYYY-MM-DD")
+    amf_import.add_argument("--observations-dir", type=Path,
+                            default=Path("data/standardized/ameriflux"))
+    amf_import.add_argument("--flags-dir", type=Path, default=Path("data/flags/ameriflux"))
+    amf_import.add_argument("--status-file", type=Path)
+    amf_import.add_argument("--skip-existing", action="store_true")
+    amf_import.add_argument("--workers", type=int, default=1)
     args = parser.parse_args()
     if args.command == "cell":
         print(grid_cell(args.latitude, args.longitude, args.resolution).cell_id)
@@ -83,6 +121,63 @@ def main() -> None:
         write_ismn_inventory(args.root, args.output_dir, pairs, issues)
         print(f"Indexed {sum(pair.temperature is not None for pair in pairs)} northern "
               f"temperature sensors; {len(issues)} scan issues")
+    elif args.command == "index-ameriflux":
+        archives, issues = scan_ameriflux(args.root)
+        heights = read_measurement_heights(args.height_file)
+        write_ameriflux_inventory(args.output_dir, archives, heights, issues)
+        northern = [item for item in archives if item.latitude >= 0 and item.temperature_columns]
+        print(f"Indexed {len(northern)} northern AmeriFlux sites and "
+              f"{sum(len(item.temperature_columns) for item in northern)} temperature streams; "
+              f"{len(issues)} scan issues")
+    elif args.command == "import-ameriflux":
+        if args.workers <= 0 or args.max_sites is not None and args.max_sites <= 0:
+            raise ValueError("workers and max-sites must be positive")
+        for value in (args.start, args.end):
+            if value is not None and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                raise ValueError("start and end must be UTC dates, YYYY-MM-DD")
+        start = datetime.fromisoformat(args.start).replace(tzinfo=timezone.utc) if args.start else None
+        end = datetime.fromisoformat(args.end).replace(tzinfo=timezone.utc) if args.end else None
+        if start is not None and end is not None and start >= end:
+            raise ValueError("start must precede end")
+        archives, issues = scan_ameriflux(args.root)
+        if issues:
+            raise ValueError(f"{len(issues)} AmeriFlux archives could not be indexed")
+        heights = read_measurement_heights(args.height_file)
+        archives = [item for item in archives if item.latitude >= 0 and item.temperature_columns
+                    and (args.site is None or item.site_code == args.site)]
+        if args.max_sites is not None:
+            archives = archives[:args.max_sites]
+        tasks = ((archive, pair_ameriflux(archive, heights), args.observations_dir,
+                  args.flags_dir, start, end, args.skip_existing) for archive in archives)
+        imported = skipped = failed = no_data = rows = 0
+        if args.status_file:
+            args.status_file.parent.mkdir(parents=True, exist_ok=True)
+        with ExitStack() as stack:
+            log = stack.enter_context(args.status_file.open("a", newline="", encoding="utf-8")
+                                      if args.status_file else open("/dev/null", "w"))
+            writer = csv.writer(log)
+            if args.status_file and log.tell() == 0:
+                writer.writerow(("site_code", "status", "sensor_hourly_rows", "detail"))
+            if args.workers == 1:
+                results = map(_import_ameriflux_task, tasks)
+            else:
+                pool = stack.enter_context(ProcessPoolExecutor(max_workers=args.workers))
+                results = pool.map(_import_ameriflux_task, tasks)
+            for number, (archive, (status, count, detail)) in enumerate(zip(archives, results), 1):
+                imported += status == "imported"
+                skipped += status == "skipped_existing"
+                failed += status == "error"
+                no_data += status == "no_data"
+                rows += count
+                if args.status_file:
+                    writer.writerow((archive.site_code, status, count, detail))
+                    log.flush()
+                if number % 20 == 0 or number == len(archives):
+                    print(f"Processed {number}/{len(archives)} AmeriFlux sites: "
+                          f"{imported} imported, {skipped} skipped, "
+                          f"{no_data} no data, {failed} errors", flush=True)
+        print(f"Imported {imported} sites and {rows} sensor-hour rows; "
+              f"{skipped} skipped, {no_data} no data, {failed} errors")
     elif args.command == "import-ismn":
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.start) or \
                 not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.end):

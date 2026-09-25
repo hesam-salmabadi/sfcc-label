@@ -71,6 +71,26 @@ sfcc-label import-ismn /path/to/ISMN-export \
 
 The inspected export indexed **1,728 northern sites and 11,774 temperature-bearing sensors**. Three negative-depth files were explicitly excluded and recorded. Local data tables and observations are Git-ignored. [ISMN terms](https://ismn.earth/terms-and-conditions) prohibit onward distribution of downloaded data, so the public repository contains importer code and schema, not ISMN-derived records. Cite both ISMN and contributing networks in scientific outputs.
 
+## AmeriFlux BASE-BADM import
+
+The independent AmeriFlux importer reads the downloaded BASE-BADM ZIP archives and their bundled site-metadata (BIF) workbooks. ISMN's [FLUXNET-AMERIFLUX contributor network](https://ismn.earth/en/networks/?id=FLUXNET-AMERIFLUX) is only a small subset of the direct AmeriFlux holdings, so the two sources remain separate with source-specific IDs. The importer uses AmeriFlux's [Measurement Height](https://ameriflux.lbl.gov/data/measurement-height/) table for actual sensor depths. AmeriFlux positional suffixes are relative indices, not depth measurements; the importer pairs TS and SWC only when exactly one of each has the same documented below-ground depth at a site. All other temperature streams remain temperature-only, with moisture `NaN`, and their depth evidence stays in the pairing report. Some BASE variables are aggregates or PI-provided series; retaining them does **not** make them independent sensors for later grid aggregation.
+
+```bash
+sfcc-label index-ameriflux /path/to/ameriflux_downloads \
+  --height-file /path/to/private-data/metadata/BASE_MeasurementHeight_YYYYMMDD.csv \
+  --output-dir /path/to/private-data/metadata
+sfcc-label import-ameriflux /path/to/ameriflux_downloads \
+  --height-file /path/to/private-data/metadata/BASE_MeasurementHeight_YYYYMMDD.csv \
+  --observations-dir /path/to/private-data/standardized/ameriflux \
+  --flags-dir /path/to/private-data/flags/ameriflux \
+  --status-file /path/to/private-data/metadata/ameriflux_import_status.csv \
+  --skip-existing --workers 4
+```
+
+BASE timestamps are [local standard time without daylight-saving shifts](https://ameriflux.lbl.gov/data/aboutdata/data-variables/); the importer applies each site's fixed BIF `UTC_OFFSET`. Half-hourly and hourly source intervals are converted to hourly UTC means using their valid-minute coverage. When both HH and HR files overlap, a valid HH observation takes precedence for that variable and hour. Soil temperature remains in °C; BASE [volumetric SWC is percent](https://ameriflux.lbl.gov/data/aboutdata/data-variables/) and is divided by 100 to become m³/m³. The source's `-9999` missing marker becomes `NaN`. A malformed numeric cell also becomes missing, with its count recorded in the per-site status log for review. No new anomaly QA/QC is applied. Per-sensor compressed sidecars record valid source minutes and original variable names; these are coverage/provenance records, not ISMN-style quality flags. The raw-output column is `NaN` because BASE TS/SWC are calibrated variables, not sensor frequency or permittivity. Use separate output directories for a date-limited pilot; `--skip-existing` does not verify that an existing file covers the same requested interval.
+
+The inspected local download has 592 archives, 571 northern sites, and 484 northern sites with temperature columns. The BIF for 8 of those temperature sites has more than one reported coordinate; the inventory marks those locations as ambiguous, and they need review before land-cover screening or location-sensitive aggregation. AmeriFlux direct data and the official Measurement Height CSV stay on the private data volume, not in Git.
+
 `data/processed/<sensor_id>.csv`, when the processor is implemented, will contain `timestamp_utc,p_frozen,p_transition,p_thawed,label,model_version`. The three probabilities must be finite, within `[0, 1]`, and sum to one (within tolerance). `label` is the highest probability class; ties use the class order frozen, transition, thawed. An unknown hour should have three `NaN` probabilities and an empty label, rather than a fabricated prediction. Annual events will be stored separately with `sensor_id,year,freeze_start_utc,freeze_end_utc,model_version` and definitions supplied with the algorithm. A year is a UTC calendar year until the event definition is specified.
 
 ## Current API
