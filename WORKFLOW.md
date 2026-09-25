@@ -1,6 +1,6 @@
 # Proposed project workflow
 
-This is how I see `sfcc-label` developing: a reproducible path from individual sensor measurements to a user request for soil freeze/thaw probabilities on EASE-Grid 2.0. The repository currently implements the data contract, validation, grid lookup, and a preliminary aggregation function. The classification method and source-specific importers are future work.
+This is how I see `sfcc-label` developing: a reproducible path from individual sensor measurements to a user request for soil freeze/thaw information on the **Northern Hemisphere EASE-Grid 2.0**. The repository currently implements the data contract, validation, grid lookup, and a preliminary summary of sampled sensors. The classification method, source-specific importers, and full-coverage gridded product are future work.
 
 ```mermaid
 flowchart LR
@@ -15,10 +15,14 @@ flowchart LR
     H --> I[Hourly state probabilities]
     H --> J[Yearly freeze start and end dates]
     E --> K[EASE-Grid 2.0 cell lookup]
-    I --> L[Cell and time aggregation]
+    I --> L[Cell and time summaries]
     K --> L
-    L --> M[Python query API and export]
-    J --> M
+    L --> M[Observed-cell product]
+    M --> O[Python query API and export]
+    N[Optional spatial upscaling model] --> P[Full-coverage product]
+    M --> N
+    P --> O
+    J --> O
 ```
 
 ## 1. Collect and preserve source data
@@ -68,15 +72,21 @@ We will need to define which inputs are required, how missing moisture is handle
 
 From hourly probabilities or labels, derive `freeze_start_utc` and `freeze_end_utc` for each sensor and year. These dates should be a separate table because they summarize a season rather than an hour. We still need your definitions for the year boundary, minimum persistence, short thaw interruptions, multiple freeze cycles, and incomplete records. The model version and event-rule version should be recorded so results remain reproducible.
 
-## 6. Place sensors on EASE-Grid 2.0 and aggregate
+## 6. Place sensors on the northern EASE-Grid 2.0 and summarize each cell
 
-Map each sensor's WGS84 coordinates to a standard global EASE-Grid 2.0 cell (EPSG:6933). The package currently supports the 9 km and 25 km global grids, using NSIDC's published dimensions and origins. A grid cell may contain zero, one, or several sensors.
+Map each sensor's WGS84 coordinates to the **Northern Hemisphere** EASE-Grid 2.0 projection (EPSG:6931). The 9 km grid has 2,000 rows and 2,000 columns, with 9,000 m cells. The package also supports the northern 25 km grid. A cell may contain zero, one, or several sensors. We should decide whether observations at different depths can enter the same cell-hour summary; the default scientific product should identify or filter depth before combining them.
 
-For each hour and cell, the current provisional method averages the available sensor probabilities and reports `station_count`. This is useful for a first queryable product, but it is not a spatial estimate for cells without sensors and does not establish calibrated grid-level uncertainty. Before a research release, we should decide whether to use depth filters, sensor weighting, minimum station coverage, and modeled covariates. Yearly event dates should be aggregated only after their scientific meaning and spatial summary rule are agreed.
+Temperature and moisture can be summarized with a mean over valid sensors, with separate counts for each variable, provided their depth and measurement meaning are comparable. The mean should be accompanied by a spread (for example standard deviation or quantiles) and source coverage. Missing moisture must not reduce the temperature count.
+
+**A categorical state is different.** If 7 of 10 sensors are labeled frozen and 3 transition, the observed label shares are 0.70 frozen, 0.30 transition, and 0 thawed. The cell is mixed in the sampled locations; assigning it a single frozen label would hide that heterogeneity. Retain the counts as well as the shares.
+
+Each sensor also has a probability vector. Take the mean of those vectors to describe the expected state share **among the sampled sensor locations**. For example, if the 7 frozen-labeled sensors each have `(0.9, 0.1, 0.0)` and the 3 transition-labeled sensors each have `(0.2, 0.8, 0.0)`, the mean vector is `(0.69, 0.31, 0.0)`. This differs from the hard-label shares `(0.70, 0.30, 0.0)`. Keep both; neither means “69% probability that the entire cell is frozen.” The code now calls the soft values `mean_sensor_p_*` and does not produce a cell label.
+
+These summaries only represent the cell area if the sensors adequately sample it. Ten sensors clustered at one site are not ten independent samples of a 9 km cell. Later, an explicit spatial model could use sensor positions, land cover, terrain, modeled soil variables, and calibration data to estimate **area fractions** or a **cell-level state probability**. That would be a separate, validated product with uncertainty and a method version. We should not fill an empty cell by averaging nearby sensor labels without such a model. Yearly event dates also need their own aggregation rule.
 
 ## 7. Let users request processed data
 
-The intended package entry point is a query such as:
+The intended package entry point can request any time span and all northern grid cells, for example hourly data for 2020–2022, or a smaller set of cells:
 
 ```python
 from sfcc_label import get_processed_data
@@ -85,11 +95,11 @@ rows = get_processed_data(
     gridded_predictions,
     start_utc=start,
     end_utc=end,
-    cell_ids={"EASE2_G_9km_r0231_c1139"},
+    cell_ids={"EASE2_N_9km_r1151_c0484"},
 )
 ```
 
-Today this filters records already loaded in memory. The later public interface should load a versioned dataset by grid, time range, and possibly bounding box; return probabilities, labels, station counts, and provenance; and support a clear export format such as Parquet or NetCDF. We should choose the storage and distribution method after estimating the number of sensors and years.
+Today this filters records already loaded in memory. The future public interface should load a versioned dataset by grid and time range and offer two clear modes: **observed cells only**, with missing cells reported as no data; and, if validated later, a **full-coverage modeled product**. A 2,000 × 2,000 grid over three hourly years has more than 100 billion cell-hours, so an all-cells request must be served with chunked, lazy reads or streamed export, not a single in-memory list. Output should include temperature/moisture statistics, state counts and shares, mean sensor probability vectors, sample counts, depth, missingness, and provenance. A compact format such as Zarr, NetCDF, or partitioned Parquet should be selected after we estimate actual coverage and access patterns.
 
 ## What exists now and what comes next
 
@@ -99,8 +109,9 @@ Today this filters records already loaded in memory. The later public interface 
 | ISMN / AmeriFlux / local importers | Planned | Representative files and access rules |
 | Freeze/thaw probabilities | Processor interface only | Scientific labeling method and training/validation plan |
 | Annual freeze dates | Output record defined | Event definitions |
-| EASE-Grid lookup | Working for global 9 km and 25 km | Preferred product resolution |
-| Grid aggregation | Working provisional mean | Scientific aggregation policy |
-| User query | In-memory filtering | Dataset storage and delivery choice |
+| EASE-Grid lookup | Working for northern 9 km and 25 km | Preferred product resolution |
+| Grid state summaries | Working counts, label shares, and mean sensor probabilities | Depth policy, sensor weighting, minimum coverage |
+| Full-coverage grid | Planned | Spatial model and independent validation |
+| User query | In-memory filtering of observed cells | Chunked dataset storage and delivery choice |
 
 The first practical milestone is to standardize a small set of representative sensors from each source and inspect coverage and raw channels. That will reveal whether the current four-column hourly format needs an extension before we implement the classifier.

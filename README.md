@@ -6,7 +6,7 @@ The project has three stages:
 
 1. **Prepare data:** harmonize ISMN, AmeriFlux, and locally collected records into one metadata table and one hourly CSV per sensor.
 2. **Classify:** use a future, versioned processor to produce per-hour class probabilities and yearly freeze onset / freeze end dates. The scientific algorithm has not yet been specified, so this stage deliberately raises `NotImplementedError`.
-3. **Serve gridded results:** map stations to EASE-Grid 2.0 cells, aggregate available station probabilities by cell and hour, and query the resulting records. This stage accepts processed records supplied by a future processor.
+3. **Serve gridded results:** map stations to Northern Hemisphere EASE-Grid 2.0 cells, summarize sampled states by cell and hour, and query the resulting records. A full-coverage product would require a separate spatial model.
 
 See [WORKFLOW.md](WORKFLOW.md) for the end-to-end project plan and the decisions still needed.
 
@@ -56,7 +56,7 @@ cell = grid_cell(stations["example_sensor"].latitude,
                  stations["example_sensor"].longitude, resolution="9km")
 ```
 
-`aggregate_probabilities(predictions, stations, resolution="9km")` computes an **unweighted arithmetic mean** of available station probabilities for each cell and hour, and includes `station_count`. This is a provisional aggregation policy, not an area estimate or a spatial interpolation. Same-cell station readings are correlated, so the mean must not be interpreted as calibrated gridded uncertainty. The query helper `get_processed_data(...)` filters these in-memory rows by UTC interval and optional cell IDs. No online data service or native ISMN/AmeriFlux downloader is implemented yet.
+`aggregate_probabilities(predictions, stations, resolution="9km")` reports per-cell/hour sensor label counts, label shares, the **unweighted mean of sensor probability vectors**, and `sensor_count`. These describe sampled locations; they are not cell-wide state probabilities or area fractions. There is no single grid-cell label. The query helper `get_processed_data(...)` filters these in-memory rows by UTC interval and optional cell IDs. No online data service or native ISMN/AmeriFlux downloader is implemented yet.
 
 ```bash
 sfcc-label validate metadata/sensors.csv data/standardized
@@ -69,7 +69,7 @@ sfcc-label cell 45.5 -73.6 --resolution 9km
 - Probability model inputs may include temperature, moisture, raw frequency/count, permittivity, and time response. The first two standardized measurement columns are stable; additional raw channels need an extension schema before they are ingested.
 - Decide whether freeze dates are defined by UTC calendar year, hydrological year, or cold season, and how multiple freeze/thaw cycles are handled.
 - Decide minimum sensor coverage, missing-data handling, confidence calibration, and validation split across stations/sites/years before publishing scientific labels.
-- The default global grid is NSIDC EASE-Grid 2.0 9 km (EPSG:6933, 3856 columns × 1624 rows). A global 25 km option is also available. Cell IDs include the grid name and zero-based row and column so resolutions cannot be mixed.
+- The default grid is NSIDC EASE-Grid 2.0 Northern Hemisphere 9 km (EPSG:6931, 2,000 columns × 2,000 rows). A northern 25 km option is also available. Cell IDs include the grid name and zero-based row and column so resolutions cannot be mixed.
 
 Grid dimensions and origins follow the [NSIDC EASE-Grid guide](https://nsidc.org/data/user-resources/help-center/guide-ease-grids). ISMN and AmeriFlux are named as planned sources, with no data mirrored in this repository.
 

@@ -5,29 +5,39 @@ from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
 from .grid import grid_cell
-from .models import Prediction, SensorMetadata, CLASSES
+from .models import Prediction, SensorMetadata
 
 
 @dataclass(frozen=True)
 class GriddedPrediction:
     cell_id: str
     timestamp_utc: datetime
-    p_frozen: float
-    p_transition: float
-    p_thawed: float
-    station_count: int
+    mean_sensor_p_frozen: float
+    mean_sensor_p_transition: float
+    mean_sensor_p_thawed: float
+    frozen_count: int
+    transition_count: int
+    thawed_count: int
+    sensor_count: int
     model_version: str
 
     @property
-    def label(self) -> str:
-        values = (self.p_frozen, self.p_transition, self.p_thawed)
-        return CLASSES[max(range(3), key=lambda index: values[index])]
+    def frozen_label_share(self) -> float:
+        return self.frozen_count / self.sensor_count
+
+    @property
+    def transition_label_share(self) -> float:
+        return self.transition_count / self.sensor_count
+
+    @property
+    def thawed_label_share(self) -> float:
+        return self.thawed_count / self.sensor_count
 
 
 def aggregate_probabilities(predictions: list[Prediction],
                             sensors: dict[str, SensorMetadata],
                             resolution: str = "9km") -> list[GriddedPrediction]:
-    """Mean valid probabilities by cell/hour; each sensor counts at most once."""
+    """Summarize sampled sensor states by cell/hour, without asserting a cell label."""
     groups = defaultdict(list)
     seen = set()
     for prediction in predictions:
@@ -53,6 +63,9 @@ def aggregate_probabilities(predictions: list[Prediction],
                                         sum(p.p_frozen for p in records) / count,
                                         sum(p.p_transition for p in records) / count,
                                         sum(p.p_thawed for p in records) / count,
+                                        sum(p.label == "frozen" for p in records),
+                                        sum(p.label == "transition" for p in records),
+                                        sum(p.label == "thawed" for p in records),
                                         count, version))
     return result
 

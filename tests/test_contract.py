@@ -28,16 +28,21 @@ def test_probability_contract_and_aggregation():
         Prediction("b", time, .2, .2, .6, "v1"),
     ], stations)
     assert len(rows) == 1
-    assert rows[0].station_count == 2
-    assert rows[0].p_frozen == pytest.approx(.5)
+    assert rows[0].sensor_count == 2
+    assert rows[0].mean_sensor_p_frozen == pytest.approx(.5)
+    assert rows[0].frozen_count == 1
+    assert rows[0].thawed_count == 1
     assert rows[0].cell_id == grid_cell(45.5, -73.6).cell_id
     assert get_processed_data(rows, start_utc=time) == rows
     assert get_processed_data(rows, end_utc=time) == []
 
 
-def test_global_grid_center_and_invalid_resolution():
-    cell = grid_cell(0, 0)
-    assert cell.row == 812
-    assert cell.col == 1928
+def test_northern_grid_pole_and_invalid_resolution():
+    cell = grid_cell(90, 0)
+    assert cell.row == 1000
+    assert cell.col == 1000
+    assert cell.cell_id.startswith("EASE2_N_9km")
     with pytest.raises(ValueError, match="resolution"):
-        grid_cell(0, 0, "10km")
+        grid_cell(90, 0, "10km")
+    with pytest.raises(ValueError, match="Northern Hemisphere"):
+        grid_cell(-1, 0)
