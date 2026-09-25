@@ -1,8 +1,10 @@
 import csv
 import gzip
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 
 from sfcc_label import read_observations
+from sfcc_label.cli import _import_ismn_task
 from sfcc_label.ismn import import_ismn_pair, pair_ismn, scan_ismn, sensor_metadata
 
 
@@ -59,3 +61,19 @@ def test_ismn_depth_pair_hourly_missingness_and_original_flags(tmp_path):
     assert flagged[1]["soil_temperature_ismn_flag"] == "D01"
     assert flagged[1]["soil_moisture_ismn_flag"] == ""
     assert flagged[2]["soil_moisture_ismn_flag"] == "C01"
+
+
+def test_parallel_import_is_resumable(tmp_path):
+    root = tmp_path / "source"
+    for depth in ("0.050000", "0.100000"):
+        _write_stm(root, "ts", depth, ["2020/01/01 00:00 -1.0 G M"])
+    pairs = pair_ismn(scan_ismn(root)[0])
+    observations, flags = tmp_path / "observations", tmp_path / "flags"
+    tasks = [(pair, datetime(2020, 1, 1, tzinfo=timezone.utc),
+              datetime(2020, 1, 2, tzinfo=timezone.utc), observations, flags, True)
+             for pair in pairs]
+    with ProcessPoolExecutor(max_workers=2) as pool:
+        assert [result[0] for result in pool.map(_import_ismn_task, tasks)] == [
+            "imported", "imported"]
+    assert [_import_ismn_task(task)[0] for task in tasks] == [
+        "skipped_existing", "skipped_existing"]

@@ -4,8 +4,10 @@ import csv
 import gzip
 import hashlib
 import math
+import os
 import re
 import shlex
+import tempfile
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -302,16 +304,29 @@ def import_ismn_pair(pair: ISMNPair, start: datetime, end: datetime,
         hours.append(Observation(timestamp, ts.value if ts else None,
                                  sm.value if sm else None, None))
         timestamp += timedelta(hours=1)
-    write_observations(observation_path, hours)
-    with gzip.open(flag_path, "wt", newline="", encoding="utf-8") as stream:
-        writer = csv.writer(stream)
-        writer.writerow(("timestamp_utc", "soil_temperature_ismn_flag",
-                         "soil_temperature_provider_flag", "soil_moisture_ismn_flag",
-                         "soil_moisture_provider_flag"))
-        for hour in hours:
-            ts = temperature.get(hour.timestamp_utc)
-            sm = moisture.get(hour.timestamp_utc)
-            writer.writerow((hour.timestamp_utc.strftime("%Y-%m-%dT%H:00:00Z"),
-                             ts.ismn_flag if ts else "", ts.provider_flag if ts else "",
-                             sm.ismn_flag if sm else "", sm.provider_flag if sm else ""))
+    obs_fd, obs_temp = tempfile.mkstemp(prefix=f".{pair.sensor_id}.", suffix=".tmp",
+                                        dir=observations_dir)
+    os.close(obs_fd)
+    flag_fd, flag_temp = tempfile.mkstemp(prefix=f".{pair.sensor_id}.", suffix=".tmp",
+                                          dir=flags_dir)
+    os.close(flag_fd)
+    try:
+        write_observations(obs_temp, hours)
+        with gzip.open(flag_temp, "wt", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(("timestamp_utc", "soil_temperature_ismn_flag",
+                             "soil_temperature_provider_flag", "soil_moisture_ismn_flag",
+                             "soil_moisture_provider_flag"))
+            for hour in hours:
+                ts = temperature.get(hour.timestamp_utc)
+                sm = moisture.get(hour.timestamp_utc)
+                writer.writerow((hour.timestamp_utc.strftime("%Y-%m-%dT%H:00:00Z"),
+                                 ts.ismn_flag if ts else "", ts.provider_flag if ts else "",
+                                 sm.ismn_flag if sm else "", sm.provider_flag if sm else ""))
+        os.replace(obs_temp, observation_path)
+        os.replace(flag_temp, flag_path)
+    finally:
+        for temporary in (obs_temp, flag_temp):
+            if os.path.exists(temporary):
+                os.unlink(temporary)
     return len(hours)

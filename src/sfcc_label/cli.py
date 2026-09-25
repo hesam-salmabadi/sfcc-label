@@ -1,7 +1,10 @@
 """Small command-line entry points for stage-one validation and grid lookup."""
 
 import argparse
+import csv
 import re
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,6 +16,21 @@ from .landcover import (read_land_cover_screen, read_sensor_land_cover,
                         write_land_cover_screen, write_sensor_land_cover)
 from .landcover_raster import (build_igbp_grid, sample_sensor_land_cover,
                                screen_from_grid)
+
+
+def _import_ismn_task(task):
+    pair, start, end, observations_dir, flags_dir, skip_existing = task
+    observation_path = observations_dir / f"{pair.sensor_id}.csv"
+    flag_path = flags_dir / f"{pair.sensor_id}.csv.gz"
+    if observation_path.exists() or flag_path.exists():
+        if observation_path.exists() and flag_path.exists() and skip_existing:
+            return "skipped_existing", 0, ""
+        return "error", 0, "existing or incomplete output"
+    try:
+        count = import_ismn_pair(pair, start, end, observations_dir, flags_dir)
+        return ("imported" if count else "no_data"), count, ""
+    except ValueError as exc:
+        return "error", 0, str(exc)
 
 
 def main() -> None:
@@ -50,6 +68,12 @@ def main() -> None:
     importer.add_argument("--observations-dir", type=Path,
                           default=Path("data/standardized"))
     importer.add_argument("--flags-dir", type=Path, default=Path("data/flags/ismn"))
+    importer.add_argument("--status-file", type=Path,
+                          help="append per-sensor results for a resumable batch")
+    importer.add_argument("--skip-existing", action="store_true",
+                          help="skip sensors with both output files already present")
+    importer.add_argument("--workers", type=int, default=1,
+                          help="parallel sensor imports (default: 1)")
     args = parser.parse_args()
     if args.command == "cell":
         print(grid_cell(args.latitude, args.longitude, args.resolution).cell_id)
@@ -69,6 +93,8 @@ def main() -> None:
             raise ValueError("start and end must be UTC dates, YYYY-MM-DD")
         if args.max_sensors is not None and args.max_sensors <= 0:
             raise ValueError("max-sensors must be positive")
+        if args.workers <= 0:
+            raise ValueError("workers must be positive")
         files, issues = scan_ismn(args.root)
         errors = [issue for issue in issues if not issue[1].startswith("excluded:")]
         if errors:
@@ -82,12 +108,37 @@ def main() -> None:
             pairs = pairs[:args.max_sensors]
         rows = 0
         imported = 0
-        for pair in pairs:
-            count = import_ismn_pair(pair, start, end,
-                                     args.observations_dir, args.flags_dir)
-            rows += count
-            imported += count > 0
-        print(f"Imported {imported} sensors and {rows} hourly rows")
+        skipped = 0
+        failed = 0
+        if args.status_file:
+            args.status_file.parent.mkdir(parents=True, exist_ok=True)
+        tasks = ((pair, start, end, args.observations_dir, args.flags_dir,
+                  args.skip_existing) for pair in pairs)
+        with ExitStack() as stack:
+            log = stack.enter_context(args.status_file.open("a", newline="", encoding="utf-8")
+                                      if args.status_file else open("/dev/null", "w"))
+            writer = csv.writer(log)
+            if args.status_file and log.tell() == 0:
+                writer.writerow(("sensor_id", "status", "hourly_rows", "detail"))
+            if args.workers == 1:
+                results = map(_import_ismn_task, tasks)
+            else:
+                pool = stack.enter_context(ProcessPoolExecutor(max_workers=args.workers))
+                results = pool.map(_import_ismn_task, tasks)
+            for number, (pair, (status, count, detail)) in enumerate(zip(pairs, results), 1):
+                imported += status == "imported"
+                skipped += status == "skipped_existing"
+                failed += status == "error"
+                rows += count
+                if args.status_file:
+                    writer.writerow((pair.sensor_id, status, count, detail))
+                    log.flush()
+                if number % 100 == 0 or number == len(pairs):
+                    print(f"Processed {number}/{len(pairs)} sensors: "
+                          f"{imported} imported, {skipped} skipped, {failed} errors",
+                          flush=True)
+        print(f"Imported {imported} sensors and {rows} hourly rows; "
+              f"{skipped} skipped, {failed} errors")
     elif args.command == "prepare-landcover":
         sensors = load_metadata(args.metadata)
         old_sensor = read_sensor_land_cover(args.sensor_table) if args.sensor_table.exists() else {}

@@ -58,15 +58,18 @@ The importer reads the ISMN `Data_separate_files_header_...` export. ISMN alread
 ```bash
 sfcc-label index-ismn /path/to/ISMN-export
 sfcc-label import-ismn /path/to/ISMN-export \
-  --start 2020-01-01 --end 2021-01-01 \
-  --network ARM --station Anthony --paired-only --max-sensors 3
+  --start 2010-01-01 --end 2026-07-21 \
+  --observations-dir /path/to/private-data/standardized/ismn \
+  --flags-dir /path/to/private-data/flags/ismn \
+  --status-file /path/to/private-data/metadata/ismn_import_status.csv \
+  --skip-existing --workers 4
 ```
 
 `index-ismn` reads filenames and headers, then creates local-only `metadata/private/ismn_sites.csv`, `ismn_sensors.csv`, `ismn_pairing.csv`, and `ismn_scan_issues.csv`. Every metadata sensor has a below-ground soil-temperature stream; moisture-only streams remain visible in the pairing report but are not imported as standalone classifier inputs. Coordinates come from ISMN file headers. Distinct instrument replacements and redundant probes keep distinct sensor IDs. A logical record can pair two physical instruments. Pairing uses the same instrument/position first, then a unique position match, then a unique pair at the same exact depth bounds. Ambiguous unmatched temperature streams remain temperature-only. The pairing report contains the original relative file paths and method for review. The supplied ISMN export also includes a `FLUXNET-AMERIFLUX` network; a later direct AmeriFlux import will need duplicate-site checks.
 
-`import-ismn` writes one CSV per selected sensor to `data/standardized/` and keeps the original flags in compressed sidecars. `--start` is inclusive and `--end` exclusive. It fills missing hours with `NaN` between the first and last available hour in the requested window. Existing outputs are not overwritten. Use filters to make bounded runs; this repository's full 2010–2026 export is too large to expand safely on the current workspace disk.
+`import-ismn` writes one CSV per selected sensor to the chosen observations directory and keeps the original flags in compressed sidecars. `--start` is inclusive and `--end` exclusive. It fills missing hours with `NaN` between the first and last available hour in the requested window. Existing outputs are not overwritten. `--skip-existing` makes interrupted batches resumable; the optional status CSV records each sensor's outcome. `--workers` parallelizes independent sensor imports. Use a separate private data volume for the full export rather than the repository disk. A sensor with no observations in the requested window is logged as `no_data` and has no output CSV.
 
-The inspected export indexed **1,728 northern sites and 11,774 temperature-bearing sensors**. Three negative-depth files were explicitly excluded and recorded; a three-sensor 2020 pilot produced 26,352 hourly rows. Local data tables and observations are Git-ignored. [ISMN terms](https://ismn.earth/terms-and-conditions) prohibit onward distribution of downloaded data, so the public repository contains importer code and schema, not ISMN-derived records. Cite both ISMN and contributing networks in scientific outputs.
+The inspected export indexed **1,728 northern sites and 11,774 temperature-bearing sensors**. Three negative-depth files were explicitly excluded and recorded. Local data tables and observations are Git-ignored. [ISMN terms](https://ismn.earth/terms-and-conditions) prohibit onward distribution of downloaded data, so the public repository contains importer code and schema, not ISMN-derived records. Cite both ISMN and contributing networks in scientific outputs.
 
 `data/processed/<sensor_id>.csv`, when the processor is implemented, will contain `timestamp_utc,p_frozen,p_transition,p_thawed,label,model_version`. The three probabilities must be finite, within `[0, 1]`, and sum to one (within tolerance). `label` is the highest probability class; ties use the class order frozen, transition, thawed. An unknown hour should have three `NaN` probabilities and an empty label, rather than a fabricated prediction. Annual events will be stored separately with `sensor_id,year,freeze_start_utc,freeze_end_utc,model_version` and definitions supplied with the algorithm. A year is a UTC calendar year until the event definition is specified.
 
