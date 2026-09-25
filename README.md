@@ -8,6 +8,8 @@ The project has three stages:
 2. **Classify:** use a future, versioned processor to produce per-hour class probabilities and yearly freeze onset / freeze end dates. The scientific algorithm has not yet been specified, so this stage deliberately raises `NotImplementedError`.
 3. **Serve gridded results:** map stations to EASE-Grid 2.0 cells, aggregate available station probabilities by cell and hour, and query the resulting records. This stage accepts processed records supplied by a future processor.
 
+See [WORKFLOW.md](WORKFLOW.md) for the end-to-end project plan and the decisions still needed.
+
 ## Installation
 
 ```bash
