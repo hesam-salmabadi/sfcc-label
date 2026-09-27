@@ -687,6 +687,16 @@ is tested per sensor. `read_land_cover_screens` recomputes eligibility from the
 stored fractions, so the thresholds in `sfcc_label.landcover` are the single
 source of truth. At 25 km, 35 % (N) and 37 % (M) of sensors pass.
 
+## Moss/lichen (evaluated, not used)
+
+No gridded moss/lichen *thickness* product exists at these scales. The
+Copernicus CGLS-LC100 v3.0.1 `MossLichen-CoverFraction` layer (2015, 100 m) was
+tested and rejected: it measures top-of-canopy cover, so ground-layer moss and
+lichen under trees or shrubs is invisible. Only 68 of 17,090 sensor pixels had any
+moss/lichen cover (about 0.1 % around Kuujjuarapik and 0 % in Schefferville
+lichen woodland). SoilGrids organic carbon and Histosols probability in
+`sensor_soil.csv` are the proxies for thick organic or moss-rich surface layers.
+
 ## Design notes and next decisions
 
 - Native source adapters should preserve source license, station version, timezone conversion, quality flags, depth, calibration, and citations. The normalized schema is an output contract; source-specific mapping rules still need real example files.

@@ -66,6 +66,36 @@ def _projectors():
     return global_x, global_y, polar_radius
 
 
+class RowProjector:
+    """EASE-2 x/y of every pixel centre in a block of lat/lon rows, per grid family."""
+
+    def __init__(self, lons: np.ndarray, families: set[str]):
+        global_x, self._global_y, self._polar_radius = _projectors()
+        self.width = len(lons)
+        self.families = families
+        radians = np.radians(lons)
+        self._sin, self._cos = np.sin(radians), np.cos(radians)
+        self._global_x = global_x(lons) if "M" in families else None
+
+    def __call__(self, lats: np.ndarray) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        projected = {}
+        if "M" in self.families:
+            projected["M"] = (np.tile(self._global_x, len(lats)),
+                              np.repeat(self._global_y(lats), self.width))
+        if "N" in self.families:
+            radius = self._polar_radius(lats)[:, None]
+            projected["N"] = ((radius * self._sin).ravel(), (-radius * self._cos).ravel())
+        return projected
+
+
+def cell_index(grid, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """Flat cell index for each point, -1 outside the grid."""
+    col = np.floor((x - grid.left) / grid.cell_m).astype(np.int64)
+    row = np.floor((grid.top - y) / grid.cell_m).astype(np.int64)
+    inside = (col >= 0) & (col < grid.columns) & (row >= 0) & (row < grid.rows)
+    return np.where(inside, row * grid.columns + col, -1)
+
+
 class _Accumulator:
     def __init__(self, name: str):
         self.grid = ease_grid(name)
@@ -73,13 +103,11 @@ class _Accumulator:
         self.weights = np.zeros(self.cells * 7, dtype=np.float64)
 
     def add(self, x, y, classes, weight):
-        grid = self.grid
-        col = np.floor((x - grid.left) / grid.cell_m).astype(np.int64)
-        row = np.floor((grid.top - y) / grid.cell_m).astype(np.int64)
-        inside = (col >= 0) & (col < grid.columns) & (row >= 0) & (row < grid.rows) & (classes > 0)
+        cells = cell_index(self.grid, x, y)
+        inside = (cells >= 0) & (classes > 0)
         if not inside.any():
             return
-        index = (row[inside] * grid.columns + col[inside]) * 7 + classes[inside]
+        index = cells[inside] * 7 + classes[inside]
         self.weights += np.bincount(index, weights=weight[inside], minlength=self.cells * 7)
 
     def bands(self) -> np.ndarray:
@@ -102,32 +130,23 @@ def aggregate_cci(source: str | Path, output_dir: str | Path, year: int = 2015,
     if any(path.exists() for path in outputs.values()):
         raise FileExistsError("land-cover grids already exist; remove them to rebuild")
     output_dir.mkdir(parents=True, exist_ok=True)
-    global_x, global_y, polar_radius = _projectors()
     accumulators = [_Accumulator(name) for name in grids]
-    families = {a.grid.family for a in accumulators}
     with rasterio.open(source) as src:
         if src.crs.to_epsg() != 4326 or src.count != 1:
             raise ValueError("expected the one-band EPSG:4326 ESA CCI LC GeoTIFF")
         step = src.transform.a
-        lons = src.transform.c + (np.arange(src.width) + 0.5) * step
-        lon_rad = np.radians(lons)
-        sin_lon, cos_lon = np.sin(lon_rad), np.cos(lon_rad)
-        xs_global = global_x(lons) if "M" in families else None
+        project = RowProjector(src.transform.c + (np.arange(src.width) + 0.5) * step,
+                               {a.grid.family for a in accumulators})
         for start in range(0, src.height, CHUNK_ROWS):
             rows = min(CHUNK_ROWS, src.height - start)
             lats = src.transform.f - (start + np.arange(rows) + 0.5) * step
-            # N grid corners reach about 34 S; M grid ends near 85 degrees
+            # stop at 40 S: only far corner cells of the N grid lie beyond it
             if lats.max() < -40:
                 break
             raw = src.read(1, window=Window(0, start, src.width, rows))
             classes = LOOKUP[raw].ravel()
             weight = np.repeat(np.cos(np.radians(lats)), src.width)
-            projected = {}
-            if "M" in families:
-                projected["M"] = (np.tile(xs_global, rows), np.repeat(global_y(lats), src.width))
-            if "N" in families:
-                radius = polar_radius(lats)[:, None]
-                projected["N"] = ((radius * sin_lon).ravel(), (-radius * cos_lon).ravel())
+            projected = project(lats)
             for accumulator in accumulators:
                 accumulator.add(*projected[accumulator.grid.family], classes, weight)
             del projected
