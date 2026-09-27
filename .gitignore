@@ -17,3 +17,6 @@ metadata/private/*
 !data/landcover/.gitkeep
 !data/flags/.gitkeep
 !metadata/private/.gitkeep
+
+# macOS Finder metadata
+.DS_Store
