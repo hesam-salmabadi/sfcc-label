@@ -31,12 +31,16 @@ class SensorMetadata:
     modeled_soil_value: str | None = None
     modeled_soil_unit: str | None = None
     modeled_soil_source: str | None = None
+    soil_temperature_sensor_type: str | None = None
+    soil_moisture_sensor_type: str | None = None
+    sensor_type_source: str | None = None
+    sensor_type_note: str | None = None
 
     def __post_init__(self) -> None:
         if not self.sensor_id or not all(c.isalnum() or c in "_-" for c in self.sensor_id):
             raise ValueError("sensor_id must contain only letters, digits, '_' or '-'")
-        if self.source not in {"ismn", "ameriflux", "local"}:
-            raise ValueError("source must be ismn, ameriflux, or local")
+        if self.source not in {"ismn", "ameriflux", "local", "nrcan_ibutton", "cambridge_bay", "dryden", "chapleau", "st_marthe_maurice", "james_bay", "montmorency", "kuujjuarapik", "berms", "tvc_boike", "tvc_hydraprobe"}:
+            raise ValueError("unsupported sensor source")
         if not isfinite(self.latitude) or not -90 <= self.latitude <= 90:
             raise ValueError("latitude must be between -90 and 90")
         if not isfinite(self.longitude) or not -180 <= self.longitude <= 180:

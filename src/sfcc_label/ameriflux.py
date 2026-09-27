@@ -21,6 +21,7 @@ from xml.etree import ElementTree
 
 from .io import OBSERVATION_COLUMNS, write_metadata
 from .models import SensorMetadata
+from .naming import ameriflux_tag, sensor_id as make_sensor_id
 
 
 _NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -190,8 +191,10 @@ def pair_ameriflux(archive: AmeriFluxArchive, heights: dict) -> list[AmeriFluxSe
     for column in archive.temperature_columns:
         depth = _soil_depth(heights, archive.site_code, column)
         moisture = matches.get(column)
+        depth_cm = depth * 100 if depth is not None else None
         result.append(AmeriFluxSensor(
-            f"{site_id}_{column}", site_id, column, moisture, depth,
+            make_sensor_id("ameriflux", archive.site_code, depth_cm, tag=ameriflux_tag(column)),
+            site_id, column, moisture, depth,
             "sole_at_depth" if moisture else "temperature_only"
         ))
     return result

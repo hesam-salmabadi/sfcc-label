@@ -16,6 +16,7 @@ from pathlib import Path
 
 from .io import write_metadata, write_observations
 from .models import Observation, SensorMetadata
+from .naming import sensor_id as make_sensor_id
 
 _FILENAME = re.compile(
     r"^.+?_(?P<variable>sm|ts)_(?P<depth_from>-?\d+\.\d+)_"
@@ -147,8 +148,8 @@ def _pair_id(depth_key: tuple, temperature: ISMNStream | None,
                  temperature.first.replacement) if temperature else None,
                 (moisture.first.instrument, moisture.first.redundancy,
                  moisture.first.replacement) if moisture else None)
-    depth_label = f"{depth_from * 100:g}-{depth_to * 100:g}cm"
-    sensor_id = f"{site_id}_{_slug(depth_label)}_{_digest(identity)}"
+    sensor_id = make_sensor_id("ismn", f"{network} {station}", depth_from * 100, depth_to * 100,
+                               tag=_digest(identity))
     return site_id, sensor_id
 
 

@@ -21,6 +21,8 @@ classifiers = [
 [project.optional-dependencies]
 test = ["pytest>=7"]
 geo = ["rasterio>=1.4,<2"]
+source-excel = ["openpyxl>=3.1,<4"]
+source-r = ["rdata>=1.1,<2"]
 
 [project.scripts]
 sfcc-label = "sfcc_label.cli:main"
