@@ -13,7 +13,7 @@ from zipfile import BadZipFile
 from .ameriflux import (import_ameriflux_site, pair_ameriflux,
                         read_measurement_heights, scan_ameriflux,
                         write_ameriflux_inventory)
-from .grid import grid_cell
+from .grid import GRID_NAMES, RESOLUTIONS, grid_cell, write_sensor_grid_cells
 from .io import load_metadata, read_observations
 from .ismn import (import_ismn_pair, pair_ismn, scan_ismn,
                    write_ismn_inventory)
@@ -27,6 +27,8 @@ from .cambridge_bay import import_cambridge_bay
 from .dryden import import_dryden
 from .chapleau import import_chapleau
 from .st_marthe_maurice import import_st_marthe_maurice
+from .soilgrids import fetch_soilgrids, match_sensors
+from .landcover_cci import aggregate_cci, sensor_landcover
 from .ibutton_transects import import_ibutton_transect
 from .berms import import_berms
 from .tvc_boike import import_tvc_boike
@@ -36,6 +38,7 @@ from .time_qc import (benchmark_standardized_solar, load_level0_profiles,
 
 # Private data volume; override with SFCC_DATA_ROOT. Keeps importer output out of the repo.
 DATA_ROOT = Path(os.environ.get("SFCC_DATA_ROOT", "/Volumes/Expansion/sfcc-label-data"))
+CCI_SOURCE = DATA_ROOT / "sources/esa_cci_lc/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif"
 
 
 def _import_ismn_task(task):
@@ -79,7 +82,8 @@ def main() -> None:
     cell = subparsers.add_parser("cell", help="look up a latitude/longitude in EASE-Grid 2.0")
     cell.add_argument("latitude", type=float)
     cell.add_argument("longitude", type=float)
-    cell.add_argument("--resolution", choices=("9km", "25km"), default="9km")
+    cell.add_argument("--resolution", choices=(*RESOLUTIONS, *GRID_NAMES), default="9km",
+                      help="bare resolution = Northern Hemisphere grid; prefix M for global")
     landcover = subparsers.add_parser("prepare-landcover", help="prepare one year of MODIS IGBP screening")
     landcover.add_argument("year", type=int)
     landcover.add_argument("source_raster", type=Path,
@@ -223,6 +227,34 @@ def main() -> None:
     tvc_import.add_argument("--observations-dir", required=True, type=Path)
     tvc_import.add_argument("--sensors-file", required=True, type=Path)
     tvc_import.add_argument("--context-file", required=True, type=Path)
+    soil_fetch = subparsers.add_parser(
+        "soilgrids-fetch", help="sample SoilGrids 2.0 rasters at every catalog location")
+    soil_fetch.add_argument("--catalog", type=Path, default=DATA_ROOT / "metadata/catalog.csv")
+    soil_fetch.add_argument("--output", type=Path, default=DATA_ROOT / "metadata/soilgrids_points.csv")
+    soil_fetch.add_argument("--cache-dir", type=Path, default=DATA_ROOT / "cache/soilgrids")
+    soil_fetch.add_argument("--workers", type=int, default=12)
+    soil_fetch.add_argument("--limit", type=int, help="sample only this many spread-out locations (pilot)")
+    soil_match = subparsers.add_parser(
+        "soilgrids-match", help="match SoilGrids layers to sensor depth, one row per sensor")
+    soil_match.add_argument("--catalog", type=Path, default=DATA_ROOT / "metadata/catalog.csv")
+    soil_match.add_argument("--points", type=Path, default=DATA_ROOT / "metadata/soilgrids_points.csv")
+    soil_match.add_argument("--output", type=Path, default=DATA_ROOT / "metadata/sensor_soil.csv")
+    cells = subparsers.add_parser(
+        "grid-cells", help="cell id of every sensor on all ten EASE-2 grids")
+    cells.add_argument("--catalog", type=Path, default=DATA_ROOT / "metadata/catalog.csv")
+    cells.add_argument("--output", type=Path, default=DATA_ROOT / "metadata/sensor_grid_cells.csv")
+    cci_grids = subparsers.add_parser(
+        "landcover-cci-grids", help="ESA CCI land cover on all N and M EASE-2 grids (6 SMOS classes)")
+    cci_grids.add_argument("--source", type=Path, default=CCI_SOURCE)
+    cci_grids.add_argument("--output-dir", type=Path, default=DATA_ROOT / "landcover")
+    cci_grids.add_argument("--year", type=int, default=2015)
+    cci_sensors = subparsers.add_parser(
+        "landcover-cci-sensors", help="per-sensor CCI class and its cell classes on every grid")
+    cci_sensors.add_argument("--catalog", type=Path, default=DATA_ROOT / "metadata/catalog.csv")
+    cci_sensors.add_argument("--source", type=Path, default=CCI_SOURCE)
+    cci_sensors.add_argument("--grid-dir", type=Path, default=DATA_ROOT / "landcover")
+    cci_sensors.add_argument("--output", type=Path, default=DATA_ROOT / "metadata/sensor_landcover_cci.csv")
+    cci_sensors.add_argument("--year", type=int, default=2015)
     tvc_hp_import = subparsers.add_parser(
         "import-tvc-hydraprobe", help="import TVC HydraProbe multi-depth workbooks")
     tvc_hp_import.add_argument("source_dir", type=Path)
@@ -430,6 +462,25 @@ def main() -> None:
                           flush=True)
         print(f"Imported {imported} sensors and {rows} hourly rows; "
               f"{skipped} skipped, {failed} errors")
+    elif args.command == "grid-cells":
+        occupied = write_sensor_grid_cells(args.catalog, args.output)
+        print(f"Wrote {args.output}")
+        for column, count in occupied.items():
+            print(f"{column}: {count} cells hold at least one sensor")
+    elif args.command == "landcover-cci-grids":
+        for path in aggregate_cci(args.source, args.output_dir, args.year,
+                                  progress=lambda message: print(message, flush=True)):
+            print(path)
+    elif args.command == "landcover-cci-sensors":
+        rows = sensor_landcover(args.catalog, args.source, args.grid_dir, args.output, args.year)
+        print(f"Wrote {rows} sensor-grid rows to {args.output}")
+    elif args.command == "soilgrids-fetch":
+        points = fetch_soilgrids(args.catalog, args.output, args.cache_dir, args.workers, args.limit,
+                                 progress=lambda message: print(message, flush=True))
+        print(f"Sampled {points} locations; wrote {args.output}")
+    elif args.command == "soilgrids-match":
+        summary = match_sensors(args.catalog, args.points, args.output)
+        print(f"Wrote {args.output}: {summary}")
     elif args.command == "prepare-landcover":
         sensors = load_metadata(args.metadata)
         old_sensor = read_sensor_land_cover(args.sensor_table) if args.sensor_table.exists() else {}

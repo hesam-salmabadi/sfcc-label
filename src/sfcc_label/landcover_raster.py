@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pyproj import Transformer
 
-from .grid import _GRIDS, grid_cell
+from .grid import ease_grid, grid_cell
 from .landcover import SensorLandCover, screen_land_cover, _class_code
 from .models import SensorMetadata
 
@@ -23,29 +23,25 @@ def _rasterio():
 
 def build_igbp_grid(source_raster: str | Path, output_raster: str | Path,
                     resolution: str = "9km") -> None:
-    """Reproject a 500 m MODIS IGBP raster to an NSIDC northern EASE grid.
+    """Reproject a 500 m MODIS IGBP raster to an NSIDC EASE-Grid 2.0 grid.
 
     Categorical mode resampling gives the dominant input class near each grid
     cell. Source should be a complete mosaic for the Northern Hemisphere.
     """
     rasterio = _rasterio()
     from rasterio.enums import Resampling
-    from rasterio.transform import from_origin
     from rasterio.warp import reproject
 
-    if resolution not in _GRIDS:
-        raise ValueError("resolution must be '9km' or '25km'")
-    columns, rows, left, top = _GRIDS[resolution]
-    cell_size = 18000000 / columns
+    grid = ease_grid(resolution)
     output_raster = Path(output_raster)
     if output_raster.exists():
         raise FileExistsError(output_raster)
     with rasterio.open(source_raster) as source:
         if source.count != 1 or source.crs is None:
             raise ValueError("source must be a georeferenced, one-band IGBP class raster")
-        with rasterio.open(output_raster, "w", driver="GTiff", width=columns,
-                           height=rows, count=1, dtype="uint8", crs="EPSG:6931",
-                           transform=from_origin(left, top, cell_size, cell_size),
+        with rasterio.open(output_raster, "w", driver="GTiff", width=grid.columns,
+                           height=grid.rows, count=1, dtype="uint8", crs=grid.crs,
+                           transform=grid.transform(),
                            nodata=255, compress="deflate", tiled=True) as target:
             reproject(source=rasterio.band(source, 1),
                       destination=rasterio.band(target, 1),
@@ -78,16 +74,13 @@ def screen_from_grid(grid_raster: str | Path, year: int, resolution: str,
                      sensor_classes: dict[tuple[str, int], SensorLandCover]):
     """Compare annual 500 m sensor classes to the dominant EASE cell class."""
     rasterio = _rasterio()
-    from rasterio.transform import from_origin
-
-    if resolution not in _GRIDS:
-        raise ValueError("resolution must be '9km' or '25km'")
-    columns, rows, left, top = _GRIDS[resolution]
-    expected = from_origin(left, top, 18000000 / columns, 18000000 / rows)
+    grid_def = ease_grid(resolution)
+    expected = grid_def.transform()
     result = []
     with rasterio.open(grid_raster) as grid:
-        if grid.count != 1 or grid.crs is None or grid.crs.to_epsg() != 6931 or grid.width != columns or \
-                grid.height != rows or not grid.transform.almost_equals(expected):
+        if grid.count != 1 or grid.crs is None or grid.crs.to_string() != grid_def.crs or \
+                grid.width != grid_def.columns or grid.height != grid_def.rows or \
+                not grid.transform.almost_equals(expected):
             raise ValueError("raster does not match the requested NSIDC EASE grid")
         for sensor in sensors.values():
             cell = grid_cell(sensor.latitude, sensor.longitude, resolution)

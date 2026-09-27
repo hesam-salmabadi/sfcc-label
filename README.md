@@ -593,6 +593,84 @@ cell = grid_cell(stations["example_sensor"].latitude,
 
 `aggregate_yearly_events(events, stations, screens, resolution="9km")` applies the same land-cover gate, then summarizes supplied per-sensor freeze-start and freeze-end dates separately with the median, earliest, latest, and number of contributing sensors. Filter to comparable sensor depths before calling it. The package does not yet infer those dates from hourly data.
 
+## SoilGrids soil properties
+
+`soilgrids-fetch` samples SoilGrids 2.0 (ISRIC, 250 m) at every distinct catalog
+location, reading only the needed pixels from ISRIC's cloud-optimized rasters
+(`files.isric.org/soilgrids/latest/data`). It fetches `clay`, `sand`, `silt`, `soc`,
+`bdod`, and `cfvo` (mean and uncertainty for all six layers 0-5, 5-15, 15-30,
+30-60, 60-100, 100-200 cm), the most probable WRB reference soil group, and the
+Cryosols and Histosols probabilities. Values are converted from SoilGrids mapped
+units to %, g/kg, and g/cm3; uncertainty is the SoilGrids (Q95-Q05)/Q50 ratio.
+A nodata pixel falls back to the nearest valid pixel within ±2 pixels (at most
+about 700 m on the diagonal), and the shift
+is recorded. Each raster is cached under `cache/soilgrids/`, so an interrupted
+fetch resumes. Spot values were checked against the ISRIC REST API.
+
+`soilgrids-match` writes `metadata/sensor_soil.csv`, one row per sensor, from the
+single SoilGrids layer that matches the sensor depth:
+
+1. Take `depth_cm` (for an interval sensor this is its midpoint).
+2. Round to the nearest whole cm.
+3. Use the layer whose range includes it, bottom edge inclusive: 0-5 holds 0 to
+   5 cm, 5-15 holds 6 to 15 cm, and so on. 5.4 cm uses 0-5; 5.6 cm uses 5-15.
+4. Deeper than 200 cm uses 100-200 (`depth_basis=measured_below_soilgrids`).
+
+AmeriFlux sensors without a documented depth are assigned systematically:
+a sensor with a vertical level (`h1v2r1` is level `v2`) takes the layer most
+often observed for that level among AmeriFlux sensors whose depth is known
+(`depth_basis=assumed_from_level`, with the share in `depth_note`); a sensor
+without a level takes 0-5 cm (`assumed_top`). Filter on `depth_basis` to exclude
+assumed depths.
+
+```bash
+sfcc-label soilgrids-fetch --workers 12      # writes metadata/soilgrids_points.csv
+sfcc-label soilgrids-match                   # writes metadata/sensor_soil.csv
+```
+
+The general `modeled_soil_*` fields in the sensor metadata are not used for
+SoilGrids; `sensor_soil.csv` holds the values with their source and version.
+
+## EASE-2 grid cells and ESA CCI land cover
+
+`sfcc_label.grid` knows ten NSIDC EASE-Grid 2.0 grids: Northern Hemisphere
+(`N`, EPSG:6931) and global (`M`, EPSG:6933) at 6.25, 9, 12.5, 25, and 36 km,
+named `N6p25km`, `N9km`, `N12p5km`, `N25km`, `N36km`, `M6p25km`, ... (`p`
+replaces the decimal point). A bare resolution such as `9km` means the `N` grid.
+Cell ids look like `EASE2_N_25km_r0302_c0162` (zero-based row and column).
+
+`sfcc-label grid-cells` writes `metadata/sensor_grid_cells.csv`: one row per
+sensor with its cell id on all ten grids (columns `EASE2_N_6p25km` ...
+`EASE2_M_36km`). Rerun it after sensors are added.
+
+`sfcc-label landcover-cci-grids` builds one GeoTIFF per grid,
+`landcover/landcover_cci2015_EASE2_<grid>.tif`, from ESA CCI Land Cover v2.0.7
+(300 m, 2015), the product used by the SMOS L3 soil freeze-thaw algorithm
+(Rautiainen et al., 2025). One representative year is used; land cover at the
+sensor sites changes little. CCI classes are merged into the six SMOS classes
+following the CCI user guide IPCC conversion:
+
+| Code | Class | CCI LCCS codes |
+| --- | --- | --- |
+| 1 | forest | 50-100, 160, 170 |
+| 2 | low_vegetation | 110-153 |
+| 3 | wetland | 180 |
+| 4 | agriculture | 10-40 |
+| 5 | water | 210 |
+| 6 | other | 190, 200-202, 220 |
+
+Band 1 is the dominant class (0 = no data); bands 2-7 are the area fraction of
+each class (uint16, scale 0.0001). Every 300 m pixel is assigned to the cell that
+contains its centre and weighted by its area (cos latitude), so fractions are
+true area shares.
+
+`sfcc-label landcover-cci-sensors` writes `metadata/sensor_landcover_cci.csv`
+with one row per sensor and grid: the sensor's own 300 m class, its cell, the
+cell's dominant class and six fractions, the fraction of the sensor's class in
+the cell, and whether the sensor matches the cell's dominant class. These are the
+inputs for SMOS-style representativeness checks (dominant class share, open
+water and "other" at most 5 %).
+
 ## MODIS land-cover preparation
 
 Prepare a georeferenced, **one-band** raster or VRT mosaic of MCD12Q1.061 `LC_Type1` (IGBP classes, nominally 500 m) for each requested year. The command samples each sensor's native pixel and creates dominant-class grids at both supported EASE-Grid resolutions using categorical mode resampling:
