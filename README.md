@@ -10,6 +10,11 @@ The project has three stages:
 
 See [WORKFLOW.md](WORKFLOW.md) for the end-to-end project plan and the decisions still needed.
 
+Dataset documentation:
+
+- [docs/data_processing_record.md](docs/data_processing_record.md): what the harmonised dataset contains, where each file lives, every processing step with its rationale, verification results, and known issues.
+- [docs/manuscript_data_section.md](docs/manuscript_data_section.md): the same material drafted as a journal data section (tables, methods, limitations).
+
 ## Installation
 
 ```bash
