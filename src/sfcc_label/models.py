@@ -25,12 +25,6 @@ class SensorMetadata:
     source_url: str | None = None
     timezone_original: str | None = None
     soil_moisture_method: str | None = None
-    land_cover: str | None = None
-    land_cover_source: str | None = None
-    modeled_soil_variable: str | None = None
-    modeled_soil_value: str | None = None
-    modeled_soil_unit: str | None = None
-    modeled_soil_source: str | None = None
     soil_temperature_sensor_type: str | None = None
     soil_moisture_sensor_type: str | None = None
     sensor_type_source: str | None = None

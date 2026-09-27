@@ -37,9 +37,8 @@ Install the optional raster tools with `python -m pip install -e '.[test,geo]'` 
 | `soil_moisture_method` | Original conversion or calibration description, if known |
 | `soil_temperature_sensor_type`, `soil_moisture_sensor_type` | Documented instrument family/model for each measurement; `NaN` when the source does not identify it |
 | `sensor_type_source`, `sensor_type_note` | Evidence and qualification for the instrument-type fields |
-| `land_cover`, `land_cover_source`, `modeled_soil_variable`, `modeled_soil_value`, `modeled_soil_unit`, `modeled_soil_source` | Optional general enrichment with source and meaning kept alongside the value |
 
-Annual MODIS 500 m land cover is stored separately in `metadata/sensor_landcover.csv` as `sensor_id,year,igbp_class,product,collection`; one sensor can have a different class in different years. It uses the `LC_Type1` IGBP legend from MCD12Q1 Collection 6.1. The table is empty until source rasters and sensor coordinates are supplied. The general `land_cover` field in `sensors.csv` is not used for the representativeness gate.
+Annual MODIS 500 m land cover is stored separately in `metadata/sensor_landcover.csv` as `sensor_id,year,igbp_class,product,collection`; one sensor can have a different class in different years. It uses the `LC_Type1` IGBP legend from MCD12Q1 Collection 6.1. The table is empty until source rasters and sensor coordinates are supplied. Site land cover and soil properties are not columns of the sensor metadata: ESA CCI land cover is in `metadata/sensor_landcover_cci.csv`, SoilGrids values in `metadata/sensor_soil.csv`, and grid cells in `metadata/sensor_grid_cells.csv`, all keyed by `sensor_id`.
 
 The merged metadata catalog is `metadata/catalog.csv`. It has the same schema as
 each source-specific `*_sensors.csv` file, so it can be loaded by the normal

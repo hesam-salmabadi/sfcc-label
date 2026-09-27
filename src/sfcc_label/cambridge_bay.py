@@ -220,8 +220,6 @@ def import_cambridge_bay(source_root: str | Path, observations_dir: str | Path,
                     station=site_id, depth_cm=float(nominal_depth),
                     depth_from_cm=float(nominal_depth), depth_to_cm=float(nominal_depth),
                     source_id=source_tag, timezone_original="UTC (assumed; unverified)",
-                    land_cover=site.land_cover or None,
-                    land_cover_source="CB_ib_2018-2019/Metadata.xlsx",
                 ))
                 contexts.append({
                     "sensor_id": sensor_id, "site_id": site_id, "campaign": campaign,
