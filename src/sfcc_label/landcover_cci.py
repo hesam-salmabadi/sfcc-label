@@ -23,6 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from .grid import CRS, GRID_NAMES, ease_grid, grid_cell
+from .landcover import screen_land_cover
 
 CLASSES = {1: "forest", 2: "low_vegetation", 3: "wetland", 4: "agriculture", 5: "water", 6: "other"}
 _GROUPS = {
@@ -42,7 +43,7 @@ SENSOR_COLUMNS = (
     "sensor_id", "source", "site_id", "latitude", "longitude", "cci_class", "sensor_class",
     "grid", "cell_id", "row", "col", "cell_class",
     *(f"{name}_fraction" for name in CLASSES.values()),
-    "sensor_class_fraction", "sensor_matches_cell", "land_cover_source",
+    "sensor_class_fraction", "sensor_matches_cell", "eligible", "reason", "land_cover_source",
 )
 
 
@@ -183,7 +184,8 @@ def sensor_landcover(catalog: str | Path, source: str | Path, grid_dir: str | Pa
                     try:
                         cell = grid_cell(float(row["latitude"]), float(row["longitude"]), name)
                     except ValueError:
-                        record.update(cell_id="NaN", row="NaN", col="NaN", cell_class="NaN")
+                        record.update(cell_id="NaN", row="NaN", col="NaN", cell_class="NaN",
+                                      eligible=False, reason="outside_grid")
                         writer.writerow(record)
                         count += 1
                         continue
@@ -195,6 +197,12 @@ def sensor_landcover(catalog: str | Path, source: str | Path, grid_dir: str | Pa
                         record[f"{CLASSES[code]}_fraction"] = format(fraction, ".4f")
                     record["sensor_class_fraction"] = (format(fractions[own - 1], ".4f") if own else "NaN")
                     record["sensor_matches_cell"] = bool(own) and own == int(values[0])
+                    screen = screen_land_cover(
+                        row["sensor_id"], name, cell.cell_id, CLASSES.get(own),
+                        CLASSES.get(int(values[0])),
+                        float(fractions[own - 1]) if own else None,
+                        float(fractions[4]), float(fractions[5]))
+                    record.update(eligible=screen.eligible, reason=screen.reason)
                     writer.writerow(record)
                     count += 1
     finally:

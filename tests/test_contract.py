@@ -4,14 +4,19 @@ import pytest
 
 from sfcc_label import (Observation, Prediction, SensorMetadata, YearlyFreezeEvent,
                         aggregate_probabilities, aggregate_yearly_events,
-                        get_processed_data, grid_cell, read_land_cover_screen,
-                        read_observations, screen_land_cover, write_land_cover_screen,
-                        write_observations)
+                        get_processed_data, grid_cell, read_land_cover_screens,
+                        read_observations, screen_land_cover, write_observations)
 
 
-def matching_screens(stations, year=2024, resolution="9km"):
-    return {(key, year, resolution): screen_land_cover(sensor, year, resolution, 5, 5)
-            for key, sensor in stations.items()}
+def _screen(sensor, resolution="9km", sensor_class="forest", cell_class="forest",
+            share=0.9, water=0.0, other=0.0):
+    cell = grid_cell(sensor.latitude, sensor.longitude, resolution).cell_id
+    return screen_land_cover(sensor.sensor_id, resolution, cell, sensor_class, cell_class,
+                             share, water, other)
+
+
+def matching_screens(stations, resolution="9km"):
+    return {(key, f"N{resolution}"): _screen(sensor, resolution) for key, sensor in stations.items()}
 
 
 def test_missing_moisture_round_trip(tmp_path):
@@ -66,7 +71,7 @@ def test_yearly_event_summary_preserves_missing_end_dates():
         YearlyFreezeEvent("b", 2023, date(10), None, "v1"),
         YearlyFreezeEvent("c", 2023, date(31), datetime(2024, 4, 30, tzinfo=timezone.utc), "v1"),
     ]
-    row, = aggregate_yearly_events(events, stations, matching_screens(stations, 2023))
+    row, = aggregate_yearly_events(events, stations, matching_screens(stations))
     assert row.freeze_start.median_utc == date(10)
     assert row.freeze_start.earliest_utc == date(1)
     assert row.freeze_start.latest_utc == date(31)
@@ -75,21 +80,37 @@ def test_yearly_event_summary_preserves_missing_end_dates():
     assert row.freeze_end.median_utc == datetime(2024, 4, 25, tzinfo=timezone.utc)
 
 
-def test_land_cover_mismatch_and_missing_year_excluded(tmp_path):
+def test_smos_style_screen_reasons():
+    sensor = SensorMetadata("a", "local", 45.5, -73.6)
+    assert _screen(sensor).reason == "representative"
+    assert _screen(sensor, cell_class="agriculture").reason == "class_mismatch"
+    assert _screen(sensor, share=0.69).reason == "class_below_70pct"
+    assert _screen(sensor, share=0.70).eligible
+    assert _screen(sensor, water=0.06).reason == "water_above_5pct"
+    assert _screen(sensor, other=0.051).reason == "other_above_5pct"
+    assert _screen(sensor, sensor_class=None).reason == "missing_sensor_class"
+    assert _screen(sensor, share=None).reason == "class_below_70pct"
+
+
+def test_unrepresentative_or_missing_screen_is_excluded(tmp_path):
     sensor = SensorMetadata("a", "local", 45.5, -73.6)
     stations = {"a": sensor}
     time = datetime(2024, 1, 1, tzinfo=timezone.utc)
     prediction = Prediction("a", time, .8, .1, .1, "v1")
-    mismatch = screen_land_cover(sensor, 2024, "9km", 5, 6)
-    assert mismatch.reason == "class_mismatch"
-    assert aggregate_probabilities([prediction], stations,
-                                   {("a", 2024, "9km"): mismatch}) == []
+    wet = _screen(sensor, water=0.2)
+    assert aggregate_probabilities([prediction], stations, {("a", "N9km"): wet}) == []
     assert aggregate_probabilities([prediction], stations, {}) == []
-    match = screen_land_cover(sensor, 2024, "9km", 5, 5)
-    audit = tmp_path / "screen.csv"
-    write_land_cover_screen(audit, [match])
-    assert read_land_cover_screen(audit)[("a", 2024, "9km")] == match
-    assert len(aggregate_probabilities([prediction], stations,
-                                       {("a", 2024, "9km"): match})) == 1
-    assert aggregate_probabilities([prediction], stations,
-                                   {("a", 2024, "9km"): match}, "25km") == []
+    good = {("a", "N9km"): _screen(sensor)}
+    assert len(aggregate_probabilities([prediction], stations, good)) == 1
+    assert aggregate_probabilities([prediction], stations, good, "25km") == []
+    table = tmp_path / "sensor_landcover_cci.csv"
+    cell = grid_cell(45.5, -73.6).cell_id
+    table.write_text(
+        "sensor_id,grid,cell_id,sensor_class,cell_class,sensor_class_fraction,"
+        "water_fraction,other_fraction\n"
+        f"a,N9km,{cell},forest,forest,0.8000,0.0100,0.0000\n"
+        "a,M9km,NaN,forest,NaN,NaN,NaN,NaN\n")
+    screens = read_land_cover_screens(table)
+    assert list(screens) == [("a", "N9km")]
+    assert screens[("a", "N9km")].eligible
+    assert len(aggregate_probabilities([prediction], stations, screens)) == 1
