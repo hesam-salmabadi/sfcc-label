@@ -23,7 +23,7 @@ catalog row (source, network, `raw_variable`).
 |---|---|
 | `thresholds.csv` | one row per sensor-winter: probe type, status, T_on, T_fr and their uncertainty, unfrozen and frozen permittivity, fit misfit, slow-freeze flag and where T_fr came from |
 | `predictions/<sensor>.csv.gz` | every hour (gzip-compressed): P(frozen), P(transition), P(thawed), most likely label, **leg** (freezing / thawing), mean frozen fraction, and where the thresholds came from |
-| `yearly_events.csv` | per freeze year: transition onset and freeze start |
+| `yearly_events.csv` | per freeze year: transition onset, freeze start and freeze end |
 | `manifest.json` | model version, depth class, git commit, all settings, counts, errors, fallback averages |
 
 ## Which sensors
@@ -139,7 +139,10 @@ lets users separate autumn freezing from spring thawing (e.g. meltwater periods 
 Each day gets the label most of its hours have (days need ≥ 75 % of the logger's readings).
 Within 1 Aug – 1 Mar:
 - **freeze start** = first day of the first run of ≥ 5 frozen days (day of first freezing, Rautiainen et al. 2025),
-- **transition onset** = the same rule for "not thawed".
+- **transition onset** = the same rule for "not thawed";
+- **freeze end** = first day of the thawing leg (after the coldest day) that begins ≥ 5 thawed days, for years
+  with a transition onset. The SMOS paper defines no spring date (wet snow masks the soil from the satellite),
+  so this mirrors the autumn rule.
 
 ## Running it
 
@@ -153,8 +156,9 @@ Defaults read `metadata/catalog.csv`, `standardized/` and `flags/` under `SFCC_D
 must be new or empty. `--bootstrap` and `--seed` set the number of bootstrap rounds and the random seed.
 
 ## Known limitations
-- Sites whose curve starts freezing gradually (logistic-like, ~17 % of real winters) get T_on about 0.25 °C
-  too cold, and mild winters there can be extrapolated badly.
+- In ~16 % of topsoil winters a gradual (logistic) curve fits slightly better; there the gradual curve puts
+  T_on 0.1–0.7 °C warmer than ours. In the clearest real cases the difference comes from uneven data just
+  above 0 °C (rain or drift steps) rather than a genuinely gradual onset, so no correction is applied.
 - Spring uses the freezing thresholds; the `leg` column marks those hours as thawing.
 - Cross-probe transfer adds ± 0.16 °C, measured only at James Bay (TEROS12 vs iButton).
 - Very dry soils (e.g. Candle Lake sand, unfrozen ε 3–5) have small permittivity drops; their thresholds lean

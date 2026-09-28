@@ -89,6 +89,7 @@ def test_freeze_start_needs_five_frozen_days():
     prob.loc["2020-11-20":"2020-11-22 23:00", ["p_thawed", "p_frozen"]] = [0.0, 1.0]   # 3-day cold snap
     dates = freeze_dates(prob)
     assert dates.loc[0, "freeze_start"] == pd.Timestamp("2020-12-01")
+    assert dates.loc[0, "freeze_end"] == pd.Timestamp("2021-03-01")          # first of >= 5 thawed days after winter
 
 
 def test_processor_fits_the_package_interface():

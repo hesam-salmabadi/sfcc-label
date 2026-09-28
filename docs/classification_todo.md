@@ -15,9 +15,8 @@ Model `sfcc-joint-1.0` is developed and evaluated for the **topsoil class (2.5 c
 ## Method
 - **Cross-probe uncertainty (± 0.16 °C)** was measured only at James Bay (TEROS12 vs iButton). Check other
   probe pairs if co-located records become available.
-- **Gradual-onset soils** (logistic-like curves, more common in dry and clay-rich soils) give T_on about
-  0.25 °C too cold in the synthetic test; the slow-freeze rule handles T_fr but not T_on.
-- **Freeze end:** no rule yet for the spring end of freezing (`freeze_end_utc` is empty).
+- **Gradual-onset soils:** documented limitation (T_on may be 0.1–0.7 °C colder than a logistic fit in the
+  ~16 % of winters where that shape fits better; real examples mostly reflect uneven data above 0 °C).
 - **Soil-based frozen-level prior (`SoilPrior`):** kept but not used; revisit after the full run.
 
 ## Before the full topsoil run

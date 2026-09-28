@@ -621,8 +621,19 @@ def _first_run(ok: pd.Series, last_start: pd.Timestamp, n: int):
 
 
 def freeze_dates(prob: pd.DataFrame, s: Settings = Settings()) -> pd.DataFrame:
-    """Per freeze year: first day starting >= persist_days of 'not thawed' / 'frozen' (start by 1 Mar)."""
+    """Per freeze year (1 Aug - 31 Jul):
+    transition_onset / freeze_start: first day (on or before 1 Mar) that begins >= persist_days of
+        'not thawed' / 'frozen' (day of first freezing, Rautiainen et al. 2025);
+    freeze_end: first day of the thawing leg (after the year's coldest day; uses prob['leg'] when present)
+        that begins >= persist_days of 'thawed' - only for years with a transition onset. The SMOS product
+        defines no spring date, so this mirrors the autumn rule."""
     daily = daily_labels(prob, s)
+    thaw_start = {}
+    if "leg" in prob:
+        legs = prob["leg"].dropna()
+        thawing = legs[legs == "thawing"]
+        for fyear in np.unique(freeze_year(thawing.index)):
+            thaw_start[int(fyear)] = thawing[freeze_year(thawing.index) == fyear].index.min().normalize()
     rows = []
     for fyear in np.unique(freeze_year(daily.index)) if len(daily) else []:
         win = daily[f"{fyear}-08-01":f"{fyear + 1}-07-31"]
@@ -630,11 +641,16 @@ def freeze_dates(prob: pd.DataFrame, s: Settings = Settings()) -> pd.DataFrame:
         if valid.sum() < 150:
             continue
         last = pd.Timestamp(f"{fyear + 1}-03-01")
-        rows.append(dict(fyear=int(fyear), valid_days=int(valid.sum()),
-                         transition_onset=_first_run(win.isin(["transition", "frozen"]).where(valid), last,
-                                                     s.persist_days),
-                         freeze_start=_first_run((win == "frozen").where(valid), last, s.persist_days)))
-    return pd.DataFrame(rows, columns=["fyear", "valid_days", "transition_onset", "freeze_start"])
+        onset = _first_run(win.isin(["transition", "frozen"]).where(valid), last, s.persist_days)
+        start = _first_run((win == "frozen").where(valid), last, s.persist_days)
+        end = pd.NaT
+        if pd.notna(onset):
+            spring = win[thaw_start.get(int(fyear), onset):]
+            end = _first_run((spring == "thawed").where(spring.notna()), pd.Timestamp(f"{fyear + 1}-07-31"),
+                             s.persist_days)
+        rows.append(dict(fyear=int(fyear), valid_days=int(valid.sum()), transition_onset=onset,
+                         freeze_start=start, freeze_end=end))
+    return pd.DataFrame(rows, columns=["fyear", "valid_days", "transition_onset", "freeze_start", "freeze_end"])
 
 
 # --- package interface -----------------------------------------------------------------------
@@ -664,9 +680,9 @@ class SFCCProcessor:
                              "p_transition": [p.p_transition for p in predictions],
                              "p_frozen": [p.p_frozen for p in predictions]}, index=index, dtype=float)
         dates = freeze_dates(prob, self.settings)
-        return [YearlyFreezeEvent(sensor.sensor_id, int(r.fyear),
-                                  None if pd.isna(r.freeze_start) else r.freeze_start.to_pydatetime().replace(tzinfo=timezone.utc),
-                                  None, self.model_version) for r in dates.itertuples()]
+        utc = lambda d: None if pd.isna(d) else d.to_pydatetime().replace(tzinfo=timezone.utc)
+        return [YearlyFreezeEvent(sensor.sensor_id, int(r.fyear), utc(r.freeze_start), utc(r.freeze_end),
+                                  self.model_version) for r in dates.itertuples()]
 
 
 # --- batch run -------------------------------------------------------------------------------
@@ -797,7 +813,7 @@ def run_classification(catalog: pd.DataFrame, observations_root: Path, output_di
     with ProcessPoolExecutor(max_workers=workers) as pool:
         dates = list(pool.map(_predict_task, tasks))
     events = pd.concat(dates) if dates else pd.DataFrame(columns=["sensor_id", "fyear", "valid_days",
-                                                                 "transition_onset", "freeze_start"])
+                                                                 "transition_onset", "freeze_start", "freeze_end"])
     events["model_version"] = MODEL_VERSION
     events.to_csv(output_dir / "yearly_events.csv", index=False, na_rep="NaN")
     fitted_winters = sum(w.fitted for f in fits.values() for w in f.winters.values())

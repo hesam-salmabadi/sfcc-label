@@ -108,7 +108,10 @@ so that spring (thaw, snowmelt infiltration) can be analysed or excluded separat
 
 Daily states were assigned by majority of hourly most-likely labels, for days with at least 75 % of possible
 readings. Following Rautiainen et al. (2025), the freeze start is the first day (on or before 1 March) that
-begins at least five consecutive frozen days; transition onset uses the same rule for the non-thawed state.
+begins at least five consecutive frozen days; transition onset uses the same rule for the non-thawed state. The freeze end is the first day of
+the thawing leg that begins at least five consecutive thawed days (years with a transition onset only);
+Rautiainen et al. (2025) define no spring date because wet snow masks soil thaw at L-band, so this rule mirrors
+the autumn definition.
 Thresholds use the whole freezing half, so the product is retrospective rather than near-real-time.
 
 ## Evaluation
