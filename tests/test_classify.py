@@ -156,6 +156,7 @@ def test_depth_classes():
     assert depth_class(0.0) == "skin" and depth_class(1.9) == "skin"
     assert depth_class(2.5) is None and depth_class(3.0) == "topsoil" and depth_class(5.08) == "topsoil"
     assert depth_class(7.4) == "topsoil" and depth_class(7.5) is None and depth_class(float("nan")) is None
+    assert depth_class(2.5, 0.0, 5.0) == "topsoil" and depth_class(2.5, 2.5, 2.5) is None
 
 
 def test_fallbacks_never_mix_depth_classes():

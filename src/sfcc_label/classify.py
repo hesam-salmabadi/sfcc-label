@@ -39,8 +39,15 @@ MODEL_VERSION = "sfcc-joint-1.0"
 DEPTH_CLASSES = {"skin": (0.0, 2.0, True, False), "topsoil": (2.5, 7.5, False, False)}
 
 
-def depth_class(depth_cm) -> str | None:
-    """'skin' for 0 <= d < 2 cm, 'topsoil' for 2.5 < d < 7.5 cm, None otherwise (other or unknown depth)."""
+# Probes that integrate a layer rather than measure at a point, assigned to a class by their layer.
+LAYER_CLASSES = {(0.0, 5.0): "topsoil"}
+
+
+def depth_class(depth_cm, depth_from_cm=None, depth_to_cm=None) -> str | None:
+    """'skin' for 0 <= d < 2 cm, 'topsoil' for 2.5 < d < 7.5 cm or a 0-5 cm integrating probe, None otherwise."""
+    if depth_from_cm is not None and depth_to_cm is not None and np.isfinite(depth_from_cm) and np.isfinite(depth_to_cm):
+        if (float(depth_from_cm), float(depth_to_cm)) in LAYER_CLASSES:
+            return LAYER_CLASSES[(float(depth_from_cm), float(depth_to_cm))]
     if depth_cm is None or not np.isfinite(depth_cm):
         return None
     for name, (lower, upper, lower_in, upper_in) in DEPTH_CLASSES.items():
@@ -774,7 +781,7 @@ def run_classification(catalog: pd.DataFrame, observations_root: Path, output_di
         return f"{lc if isinstance(lc, str) else 'unknown'}|{tex if isinstance(tex, str) else 'unknown'}"
 
     meta = {r["sensor_id"]: (r["network"] if isinstance(r.get("network"), str) else r["source"], r["probe"],
-                             depth_class(r.get("depth_cm")) or "unclassified", ground(r)) for r in rows}
+                             depth_class(r.get("depth_cm"), r.get("depth_from_cm"), r.get("depth_to_cm")) or "unclassified", ground(r)) for r in rows}
     fits, errors = {}, {}
     with ProcessPoolExecutor(max_workers=workers) as pool:
         for sid, fit, err in pool.map(_fit_task, [(r, observations_root, flags_root, settings) for r in rows]):

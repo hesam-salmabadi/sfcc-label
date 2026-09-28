@@ -49,7 +49,7 @@ hourly), which equalises the weight of temperature ranges irrespective of reside
 ε_u was the median of bins between +0.8 and +2.5 °C. T_on, the width w = T_on − T_fr and the frozen
 fraction f = ε_r/ε_u were estimated jointly by bounded least squares on √ε in the bins between −4 and
 +2.5 °C, with residuals scaled by the robust scatter of the unfrozen bins and two prior penalty terms:
-f ~ N(0.44, 0.14²) and ln w ~ N(ln 1.45, 0.7²). The priors were derived from 1,324 real winters at 320 sites
+f ~ N(0.44, 0.14²) and ln w ~ N(ln 1.45, 0.7²). The priors were derived from 1,326 real winters at 492 sensors
 that reached below −5 °C and showed a clear residual plateau (frozen/unfrozen permittivity ratio: median
 0.44, 10th–90th percentile 0.24–0.60; median 10–75 % width 1.45 °C). The prior on f was preferred over a
 regression on SoilGrids clay, organic carbon, bulk density and probe type, which reduced the
@@ -82,7 +82,7 @@ eight co-located James Bay sites (mean +0.02 °C, hence no offset correction). I
 1,251 winters, network × probe type gave the lowest prediction error for T_on, T_fr and width (e.g. T_on
 0.22 °C vs 0.34 °C for a global median), whereas ESA CCI land cover or SoilGrids clay class alone added little; for topsoil sensors, land cover × USDA
 texture class was the best land-cover/soil grouping (T_on 0.22 °C vs 0.29 °C without grouping). Only sensors
-with 2.5 cm < depth < 7.5 cm (topsoil class) were processed.
+with 2.5 cm < depth < 7.5 cm, plus probes integrating 0–5 cm (topsoil class), were processed.
 
 Winter estimates were shrunk toward the sensor mean with
 a DerSimonian–Laird random-effects model (DerSimonian and Laird, 1986) while retaining each winter's own

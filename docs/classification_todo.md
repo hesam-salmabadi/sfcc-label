@@ -1,14 +1,14 @@
 # Classification — open items
 
-Model `sfcc-joint-1.0` is developed and evaluated for the **topsoil class (2.5 cm < depth < 7.5 cm)** only.
+Model `sfcc-joint-1.0` is developed and evaluated for the **topsoil class (2.5 cm < depth < 7.5 cm, plus 0–5 cm integrating probes)** only.
 `sfcc-label classify` processes that class by default. Items below are deliberately postponed.
 
 ## Depth
 - **Surface skin (0 ≤ depth < 2 cm, 197 sensors):** evaluate whether the priors (frozen fraction, width), the
   slow-freeze cut-off and the fallback averages hold for sensors at or near the surface before running it
   (`--depth-class skin` exists but is not validated).
-- **Sensors at 2–2.5 cm (816):** decide whether they belong to topsoil. At exactly 2.5 cm there are 291 ISMN
-  probes integrating 0–5 cm (midpoint 2.5 cm) and 56 point sensors at 2.5 cm (55 AmeriFlux, 1 BERMS).
+- **Sensors at 2–2.5 cm:** the 291 ISMN probes integrating 0–5 cm are in topsoil (decided 2026-09-28); the 56
+  point sensors at exactly 2.5 cm (55 AmeriFlux, 1 BERMS) and sensors at 2–2.5 cm stay out for now.
 - **Deeper sensors (≥ 7.5 cm, about 10,600 sensors):** define depth classes, check the method per class, run.
 - **Sensors without a depth (332):** decide whether any can be assigned a class.
 

@@ -749,7 +749,7 @@ sfcc-label classify --output-dir /path/to/private-data/processed/sfcc-joint-1.0 
   --source local --network "James Bay" --workers 8
 ```
 
-Only topsoil sensors (2.5 cm < depth < 7.5 cm) are processed by default (`--depth-class`).
+Only topsoil sensors (2.5 cm < depth < 7.5 cm, plus 0–5 cm integrating probes) are processed by default (`--depth-class`).
 Outputs: `thresholds.csv`, `predictions/<sensor_id>.csv.gz` (the package prediction format plus `leg`,
 `frozen_fraction` and `threshold_source`), `yearly_events.csv`, and `manifest.json` (settings, slow-freeze
 cut-off and fallback averages). The method is described step by step in

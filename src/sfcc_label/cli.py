@@ -75,7 +75,9 @@ def _classify(args) -> None:
     import subprocess
     from .classify import catalog_probes, depth_class
     catalog = pd.read_csv(args.catalog, low_memory=False)
-    catalog = catalog[catalog["depth_cm"].map(depth_class) == args.depth_class]
+    classes = [depth_class(r.get("depth_cm"), r.get("depth_from_cm"), r.get("depth_to_cm"))
+               for r in catalog.to_dict("records")]
+    catalog = catalog[[c == args.depth_class for c in classes]]
     pairing = args.catalog.parent / "ismn_pairing.csv"
     catalog["probe"] = catalog_probes(catalog, pd.read_csv(pairing) if pairing.exists() else None)
     land_cover = args.catalog.parent / "sensor_landcover_cci.csv"

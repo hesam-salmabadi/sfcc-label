@@ -27,7 +27,8 @@ catalog row (source, network, `raw_variable`).
 | `manifest.json` | model version, depth class, git commit, all settings, counts, errors, fallback averages |
 
 ## Which sensors
-Only sensors in the **topsoil class, 2.5 cm < depth < 7.5 cm** (3,680 sensors, mostly 5 cm and 5.08 cm),
+Only sensors in the **topsoil class, 2.5 cm < depth < 7.5 cm, plus probes that integrate 0–5 cm** (3,971 sensors: 3,680
+point sensors, mostly 5 cm and 5.08 cm, and 291 ISMN 0–5 cm probes),
 are processed; this is the class the method was developed and evaluated for. The surface skin (0–2 cm) and
 deeper sensors are on the to-do list ([classification_todo.md](classification_todo.md)). Fallback averages
 are always computed within one depth class, so classes never borrow from each other.
@@ -65,7 +66,7 @@ real curves better than a logistic shape in 83 % of 1,326 real winters.
 - the **frozen level** (fully frozen permittivity)
 
 Two soft anchors keep the fit sensible when the winter's data cannot show everything:
-- frozen level ≈ **0.44 × unfrozen permittivity** (± 0.14; from 1,324 real winters at 320 sites),
+- frozen level ≈ **0.44 × unfrozen permittivity** (± 0.14; from 1,326 real winters at 492 sensors),
 - curve width T_on − T_fr ≈ **1.45 °C** (real median).
 
 Where the cold data show the curve clearly, the data win; where they do not (mild winters), the anchors keep

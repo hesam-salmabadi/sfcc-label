@@ -1,0 +1,353 @@
+% Draft for Earth System Science Data using Copernicus LaTeX package 7.16.
+% Numbers reflect docs/data_processing_record.md as of 2026-09-27.
+\documentclass[essd,manuscript]{copernicus}
+
+\begin{document}
+
+\title{A harmonised in situ soil temperature and moisture dataset for Northern Hemisphere soil freeze--thaw studies}
+
+% Confirm author order, affiliations, and corresponding author before submission.
+\Author[1]{Hesam}{Salmabadi}
+\Author[2]{Alexander}{Roy}
+\Author[3]{Aaron}{Berg}
+
+\affil[1]{Affiliation of Hesam Salmabadi to be confirmed}
+\affil[2]{Affiliation of Alexander Roy to be confirmed}
+\affil[3]{Affiliation of Aaron Berg to be confirmed}
+
+\runningtitle{In situ soil data for freeze--thaw studies}
+\runningauthor{Salmabadi et al.}
+
+\received{}
+\pubdiscuss{}
+\revised{}
+\accepted{}
+\published{}
+\firstpage{1}
+
+\maketitle
+
+\begin{abstract}
+Soil freeze--thaw studies need observations across depths, land-cover types,
+and spatial scales. We assembled hourly in situ soil temperature and, where
+available, volumetric soil moisture from 14 sources into a harmonised collection
+of 17,090 sensor records at 2,482 sites in the Northern Hemisphere. The records
+span 1991--2026 and contain approximately 808 million valid hourly temperature
+values and 133 million valid hourly moisture values. Each sensor has source and
+depth metadata, and we link the observations to SoilGrids properties, ten
+EASE-Grid 2.0 grids, and land-cover context. We describe source-specific
+harmonisation, independent checks of derived metadata, and limitations that
+affect use for freeze--thaw applications. The final abstract must cite the
+archived, accessible data product and its persistent identifier.
+\end{abstract}
+
+\introduction
+In situ soil temperature and moisture observations provide reference data for
+studies of soil freeze and thaw and for evaluation of gridded products. Their
+reuse is complicated by differences in source files, time conventions, sensor
+depths, and site metadata. This article documents a harmonised collection of
+hourly observations and associated spatial context. The intended product is a
+reusable observational resource; freeze--thaw state or transition dates are
+not yet part of this dataset. A complete introduction and comparison with
+existing collections will be developed for submission.
+
+\section{Data and metadata}
+The collection contains 17,090 sensor records at 2,482 sites (2,468 distinct
+locations) from 14 sources, spanning 1.9--74.7\,$^{\circ}$\,N and 1991--2026
+(Table~\ref{tab:sources}). It includes 808.4 million valid hourly soil
+temperature values and 133.5 million soil moisture values; 2,934 sensors
+measure both at a documented common depth. Each source was processed by a
+dedicated importer. Timestamps were converted to UTC, sub-hourly readings were
+averaged within each hour, missing hours were left missing, and moisture was
+expressed as m\textsuperscript{3}\,m\textsuperscript{-3}. No values were
+interpolated or subjected to new anomaly screening; source quality information
+was retained where available.
+
+\begin{table}[t]
+\caption{Observation sources. Regional and partner records comprise the other
+12 sources; counts describe the working collection before a public-release
+subset is defined.}
+\label{tab:sources}
+\centering
+\begin{tabular}{lrr}
+\hline
+Source group & Sensors & Sites \\
+\hline
+International Soil Moisture Network & 11,774 & 1,728 \\
+AmeriFlux BASE & 4,684 & 484 \\
+Regional and partner records & 632 & 270 \\
+\hline
+Total & 17,090 & 2,482 \\
+\hline
+\end{tabular}
+\end{table}
+
+The \texttt{sensor\_id} links each hourly file to four metadata tables
+(Fig.~\ref{fig:metadata}). The catalog identifies the source, site, coordinates,
+depth or depth interval, original variable and time convention. SoilGrids 2.0
+provides depth-matched texture, organic carbon, bulk density, coarse fragments,
+soil class and uncertainty at 250\,m resolution \citep{poggio2021}; one of six
+standard soil layers is assigned to each sensor. EASE-Grid 2.0 cell identifiers
+locate every sensor on Northern Hemisphere and global grids at 6.25--36\,km
+\citep{brodzik2012}. ESA CCI 2015 land cover provides the sensor class, six
+area-weighted class fractions for each cell, and a representativeness flag for
+each sensor--grid pair. That flag requires the sensor class to dominate at
+least 70\,\% of the cell, with no more than 5\,\% water or 5\,\% other cover.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[>=stealth, every node/.style={font=\small}]
+\node[draw, rounded corners, align=center, minimum width=3.1cm, minimum height=1.1cm] (src) at (0,0) {14 source collections};
+\node[draw, rounded corners, align=center, minimum width=3.1cm, minimum height=1.1cm] (hour) at (4.4,0) {Hourly UTC files\\one per sensor};
+\node[draw, rounded corners, align=center, minimum width=3.1cm, minimum height=1.1cm] (cat) at (8.8,0) {Sensor catalog\\\texttt{sensor\_id}};
+\node[draw, rounded corners, align=center, minimum width=4.3cm, minimum height=1.2cm] (anc) at (8.8,-2.1) {SoilGrids soil\quad EASE-Grid cells\\CCI land cover and screening};
+\draw[->] (src) -- (hour);
+\draw[->] (hour) -- (cat);
+\draw[->] (cat) -- (anc);
+\end{tikzpicture}
+\caption{Observation files and derived metadata are joined by the unique sensor identifier.}
+\label{fig:metadata}
+\end{figure}
+
+\section{Soil freeze--thaw state}
+\label{sec:state}
+
+\subsection{Sensors with soil moisture or permittivity}
+\label{sec:state-permittivity}
+For sensors that measure bulk permittivity $\varepsilon$ together with soil
+temperature, or volumetric water content converted to (pseudo-)permittivity by
+inverting \citet{topp1980}, the freezing of soil water is described by a soil
+freezing characteristic curve in permittivity--temperature space
+\citep{salmabadi2026}. The method is applied to the topsoil class
+($2.5 < z < 7.5$\,cm, plus probes integrating 0--5\,cm). Each freeze year (1~August--31~July) is split at the day
+of lowest daily-mean soil temperature into a freezing and a thawing leg. The
+curve is fitted to the freezing leg only, so that snowmelt infiltration and
+thaw hysteresis do not enter the fit. Readings of the freezing leg are grouped
+into 0.1\,$^{\circ}$C soil-temperature bins, the resolution of most soil
+thermistors, and each bin is summarised by the median of $\sqrt{\varepsilon}$.
+Binning weights all temperatures equally, whatever the time the soil spent at
+them, and short freeze--thaw episodes near 0\,$^{\circ}$C contribute points to
+the same curve instead of being treated as separate events
+(Fig.~\ref{fig:binning}).
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_binning.png}
+\caption{Binning of one freezing leg (Kenaston EC02, HydraProbe, 5\,cm, winter
+2017--2018). (a) Soil temperature from 1~August to the coldest day; short
+episodes below $T_{on}$ before the main freeze are shaded orange. (b) Hourly
+readings (grey; episodes in orange) and the median of each 0.1\,$^{\circ}$C bin
+(black), with $T_{on}$ and $T_{fr}$ (dotted). (c) Hours per bin: the soil spends
+more than 100\,h in single bins near 0\,$^{\circ}$C but only a few hours in the
+bins it crosses quickly, and each bin contributes one point to the fit.}
+\label{fig:binning}
+\end{figure*}
+
+Following \citet{cohen2021}, observations are expressed as a frozen fraction
+between an unfrozen level $\varepsilon_u$ and a frozen (residual) level
+$\varepsilon_r$,
+\begin{equation}
+F = \frac{\sqrt{\varepsilon_u} - \sqrt{\varepsilon}}{\sqrt{\varepsilon_u} - \sqrt{\varepsilon_r}},
+\label{eq:fraction}
+\end{equation}
+where the square roots follow a dielectric mixing model with exponent 0.5.
+The two levels are obtained as described below (Fig.~\ref{fig:levels}).
+The frozen fraction follows the curve of \citet{bai2018},
+\begin{equation}
+F(T) = 1 - \exp\left[b\,(T - T_f)\right] \quad \text{for } T < T_f, \qquad F(T) = 0 \text{ otherwise},
+\label{eq:bai}
+\end{equation}
+in which the freezing onset $T_f$ is a free parameter to absorb freezing-point
+depression and probe offsets \citep{salmabadi2026}. We parametrise
+Eq.~(\ref{eq:bai}) directly by the temperatures at which 10\,\% and 75\,\% of the
+freezable water is frozen, $T_{on}$ \citep{cohen2021} and $T_{fr}$
+\citep{salmabadi2026}, so that
+$b = \ln(0.90/0.25)/(T_{on}-T_{fr})$. Soil is thawed above $T_{on}$, frozen
+below $T_{fr}$, and in transition between them.
+
+\paragraph{Unfrozen level.} $\varepsilon_u$ is the median permittivity of the
+bins between $+0.8$ and $+2.5$\,$^{\circ}$C. The lower limit keeps the window
+clear of the freezing onset, which can lie up to about $+0.7$\,$^{\circ}$C
+because of thermistor offsets; the upper limit keeps it close to the freezing
+point, so that the level reflects the soil moisture just before freezing rather
+than the wetter or drier conditions of early autumn. Because each bin counts
+once, the median is not dominated by the long periods the soil spends at a
+single temperature, and it is robust to a moisture step inside the window
+(Fig.~\ref{fig:levels}b, where a change in autumn soil moisture splits the window bins into two
+groups).
+
+\paragraph{Frozen level observed.} Once almost all freezable water has
+turned to ice, permittivity stops falling as the soil cools further, and the
+coldest bins form a flat stretch (Fig.~\ref{fig:levels}a). We used such
+winters to learn the typical frozen level. A winter qualified when (i) its soil
+reached $-5$\,$^{\circ}$C, well beyond the typical $T_{fr}$, so that a flat
+stretch has room to appear; (ii) the coldest bins formed a flat stretch at
+least 0.5\,$^{\circ}$C long; and (iii) permittivity fell by more than 3 units
+between the unfrozen and frozen levels, so that the ratio of the two is not
+dominated by noise. The flat stretch starts at the coldest bins and extends
+towards warmer bins for as long as each bin stays close to the three coldest
+ones, where close means within 10\,\% of the total fall of $\sqrt{\varepsilon}$.
+In Fig.~\ref{fig:levels}a, $\varepsilon_u = 20.0$ and the three coldest bins
+have $\varepsilon \approx 6.7$; the total fall of $\sqrt{\varepsilon}$ is
+$4.47-2.56 = 1.91$, so bins within $\pm0.19$ of $\sqrt{6.7}$, that is
+$\varepsilon$ between 5.7 and 7.7, belong to the stretch. It runs from
+$-6.4$ to $-1.2$\,$^{\circ}$C (43 bins); the bin at $-1.1$\,$^{\circ}$C
+($\varepsilon = 7.74$) ends it. The observed $\varepsilon_r$ is the median of
+the stretch, 6.9. Across 1,326 qualifying winters at 492 sensors,
+$\varepsilon_r/\varepsilon_u$ had a median of 0.44 and a standard deviation of
+0.14, and the median width $T_{on}-T_{fr}$ was 1.45\,$^{\circ}$C; these values
+are used as priors. For the 1,285 topsoil winters at 467 sensors the ratio
+had a median of 0.45 (10th--90th percentile 0.25--0.60;
+Fig.~\ref{fig:frozen-fraction}).
+
+\paragraph{Frozen level estimated.} Most winters do not show a plateau: the
+soil stays too warm, or it is cold but its permittivity is still falling
+(Fig.~\ref{fig:levels}b, c). In production, therefore, $\varepsilon_r$ is not
+taken from the plateau rule but estimated for every winter together with
+$T_{on}$ and $T_{fr}$, as $\varepsilon_r = f\,\varepsilon_u$, by least squares
+on the bins between $-4$ and $+2.5$\,$^{\circ}$C. Residuals are scaled by the
+robust scatter of the unfrozen bins, and two penalty terms act as weak priors:
+$f \sim \mathcal{N}(0.44, 0.14^2)$ and $\ln(T_{on}-T_{fr}) \sim
+\mathcal{N}(\ln 1.45, 0.7^2)$. The fitted frozen level may not exceed the lowest
+binned permittivity by more than 5\,\%, since the soil cannot be less frozen
+than it was at its coldest. The fit is started from three initial values and the best
+solution kept. When cold bins define a plateau, they outweigh the prior and
+the fitted level matches the observed one (6.9 in both cases in
+Fig.~\ref{fig:levels}a). When the soil is cold but still sinking, the curvature
+of the cold bins and the prior together place the level below the lowest bin
+(7.9 against a lowest bin of 8.1 in Fig.~\ref{fig:levels}b). When the soil
+never freezes completely, the level follows the prior (12.2, i.e.
+$0.48\,\varepsilon_u$, in Fig.~\ref{fig:levels}c), and the resulting
+uncertainty of $T_{fr}$ is carried forward by the bootstrap and the extra error
+terms described below (Fig.~\ref{fig:example-winters}).
+A regression of $\varepsilon_r$ on SoilGrids
+texture, organic carbon, bulk density and probe type reduced the
+leave-one-site-out error only from 1.16 to 1.01 permittivity units and was not
+adopted. Fits are rejected when the soil showed less than 15\,\% of the
+expected permittivity drop, when a parameter reached its bound, or when the
+misfit of the bins colder than $T_{on}$ exceeded 30\,\% of the drop.
+
+Uncertainty is estimated with a bootstrap of 200 replicates that resample whole
+days with replacement and redraw the prior centres, repeating the binning and
+the fit. $T_{on}$ and $T_{fr}$ are the replicate medians and their spread the
+fitting uncertainty; to reach nominal 95\,\% coverage on a synthetic benchmark
+with known thresholds, 0.1\,$^{\circ}$C is added to $T_{on}$ and 0.2, 0.5 or
+1.0\,$^{\circ}$C to $T_{fr}$ when the soil went at least 1\,$^{\circ}$C below,
+less than 1\,$^{\circ}$C below, or never below $T_{fr}$. Hourly state
+probabilities are obtained by Monte Carlo: 400 $(T_{on},T_{fr})$ pairs are drawn
+from the bootstrap distribution and compared with the measured temperature
+perturbed by 0.1\,$^{\circ}$C thermometer noise; the probability of each state
+is the fraction of draws in which it occurs. The thermistor offset of each
+probe is already contained in its fitted thresholds, so only the random
+thermometer error is added.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_levels.png}
+\caption{How the unfrozen and frozen levels are obtained, for three topsoil
+winters at Kenaston (EC06, UG21) and James Bay (BJ04). Dots are 0.1\,$^{\circ}$C
+bin medians of the freezing leg; orange dots fall in the $+0.8$ to
+$+2.5$\,$^{\circ}$C window whose median is $\varepsilon_u$ (orange dashed line;
+20.0, 15.0 and 25.1). The blue band is the prior range
+$(0.44 \pm 0.14)\,\varepsilon_u$ and the blue dashed line the frozen level from
+the joint fit. (a) The coldest bins form a flat run (open circles) whose
+median, 6.9, is the observed frozen level; the fit reproduces it. (b) The soil
+reached $-3.7$\,$^{\circ}$C but its permittivity was still decreasing; no
+frozen level is observed and the fit places it at 7.9, just below the lowest
+bin. (c) The soil never fell below $+0.3$\,$^{\circ}$C; the frozen level,
+12.2, is set by the prior.}
+\label{fig:levels}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_example_winters.png}
+\caption{Two topsoil winters. (a, d) Binned permittivity against soil
+temperature with the fitted curve (black), bootstrap curves (grey), unfrozen and
+frozen levels (dashed), $T_{on}$ and $T_{fr}$ (dotted) and the coldest soil
+temperature of the winter (grey line). (b, e) Soil temperature through the
+freeze year with the transition range $T_{fr}$--$T_{on}$ (green) and the start
+of the thawing leg. (c, f) Hourly state probabilities (6-hour means). In
+(a--c) the soil freezes completely and the frozen level is observed; in (d--f)
+the soil never falls below $+0.3$\,$^{\circ}$C, the frozen level relies on the
+prior, and $T_{fr}$ is highly uncertain.}
+\label{fig:example-winters}
+\end{figure*}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_frozen_fraction.png}
+\caption{Frozen and unfrozen permittivity of 1,285 topsoil winters at 467 sensors
+whose soil reached $-5$\,$^{\circ}$C with an observed frozen level. (a) Ratio
+$\varepsilon_r/\varepsilon_u$ (grey band: 10th--90th percentile). (b) One dot
+per winter; the solid line is $0.44\,\varepsilon_u$ and the dotted lines the
+10th and 90th percentiles.}
+\label{fig:frozen-fraction}
+\end{figure}
+
+\section{Data quality, validation, and limitations}
+An independent implementation recomputed grid cells, land-cover assignments,
+representativeness flags, and SoilGrids values from source definitions and
+rasters. Approximately 4.7 million comparisons showed no discrepancies in the
+derived metadata. These checks verify the processing, not the accuracy of the
+original sensor measurements. Source quality flags are retained where
+available, but no additional measurement-level quality control was applied.
+Some source time conventions are assumed, 332 AmeriFlux sensor depths are
+inferred, and SoilGrids properties are model estimates rather than site
+measurements. The uncertainty and plausibility assessment required for the
+released data product still needs to be completed.
+
+\conclusions
+The collection brings hourly soil observations and spatial context into a
+common format for freeze--thaw studies. Its final scope and claims depend on
+the releasable data product and its independent quality assessment.
+
+\codedataavailability{Processing code is available at
+\url{https://github.com/hesam-salmabadi/sfcc-label}. The dataset described in
+this draft is not yet deposited as a public, versioned release. Before ESSD
+submission, provide a repository review link or DOI for the releasable data
+product, cite each original source, and explain any records that cannot be
+redistributed. ISMN observations cannot be redistributed under their source
+terms and are available from \url{https://ismn.earth}; AmeriFlux source data
+are available from \url{https://ameriflux.lbl.gov}.}
+
+\authorcontribution{Author contributions to be confirmed with all co-authors.}
+\competinginterests{Competing-interest declarations to be confirmed with all co-authors.}
+
+\begin{acknowledgements}
+Acknowledgements and funding to be completed with all co-authors.
+\end{acknowledgements}
+
+\begin{thebibliography}{}
+\bibitem[Bai et al.(2018)]{bai2018}
+Bai, R., Lai, Y., Zhang, M., and Yu, F.: Theory and application of a novel soil
+freezing characteristic curve, Appl. Therm. Eng., 129, 1106--1114, 2018.
+
+\bibitem[Cohen et al.(2021)]{cohen2021}
+Cohen, J., Rautiainen, K., Lemmetyinen, J., Smolander, T., Vehvil\"ainen, J.,
+and Pulliainen, J.: Sentinel-1 based soil freeze/thaw estimation in boreal
+forest environments, Remote Sens. Environ., 254, 112267, 2021.
+
+\bibitem[Salmabadi et al.(2026)]{salmabadi2026}
+Salmabadi, H., Pardo Lara, R., Berg, A., Mavrovic, A., Hanes, C., Montpetit, B.,
+and Roy, A.: In situ monitoring of seasonally frozen ground using soil freezing
+characteristic curve in permittivity--temperature space, The Cryosphere, 20,
+1635--1654, 2026.
+
+\bibitem[Topp et al.(1980)]{topp1980}
+Topp, G. C., Davis, J. L., and Annan, A. P.: Electromagnetic determination of
+soil water content: measurements in coaxial transmission lines, Water Resour.
+Res., 16, 574--582, 1980.
+
+\bibitem[Brodzik et al.(2012)]{brodzik2012}
+Brodzik, M. J., Billingsley, B., Haran, T., Raup, B., and Savoie, M. H.:
+EASE-Grid 2.0: Incremental but significant improvements for Earth-gridded data
+sets, ISPRS Int. J. Geo-Inf., 1, 32--45, 2012.
+
+\bibitem[Poggio et al.(2021)]{poggio2021}
+Poggio, L., de Sousa, L. M., Batjes, N. H., Heuvelink, G. B. M., Kempen, B.,
+Ribeiro, E., and Rossiter, D.: SoilGrids 2.0: producing soil information for
+the globe with quantified spatial uncertainty, SOIL, 7, 217--240, 2021.
+\end{thebibliography}
+
+\end{document}
