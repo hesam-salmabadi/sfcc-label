@@ -74,7 +74,7 @@ A versioned processor will consume a sensor's metadata and hourly series and ret
 P(frozen), P(transition), P(thawed)
 ```
 
-For a classified hour the probabilities sum to 1; the largest gives the label. For an hour the model cannot classify, all three probabilities are missing rather than set to zero. Model `sfcc-joint-1.0` (`sfcc-label classify`, `src/sfcc_label/classify.py`) fits a soil freezing characteristic curve in permittivity–temperature space for each sensor-winter, reads the 10 % (onset) and 75 % (frozen) thresholds with bootstrap uncertainty, and draws hourly probabilities; winters or sensors without a fit borrow the sensor or network average. See [docs/classification_pipeline.md](docs/classification_pipeline.md) and [docs/classification_methods.md](docs/classification_methods.md).
+For a classified hour the probabilities sum to 1; the largest gives the label. For an hour the model cannot classify, all three probabilities are missing rather than set to zero. Model `sfcc-joint-1.1` (`sfcc-label classify`, `src/sfcc_label/classify.py`) fits a soil freezing characteristic curve in permittivity–temperature space for each sensor-winter, reads the 10 % (onset) and 75 % (frozen) thresholds with bootstrap uncertainty, and draws hourly probabilities; winters or sensors without a fit borrow the sensor or network average. See [docs/classification_pipeline.md](docs/classification_pipeline.md) and [docs/classification_methods.md](docs/classification_methods.md).
 
 ## 5. Derive annual freeze events
 
@@ -120,7 +120,7 @@ Today this filters records already loaded in memory. The future public interface
 | MODIS land-cover screening | Annual metadata, grid builder, and exact-match gate implemented | Annual MCD12Q1 IGBP mosaics and sensor coordinates |
 | AmeriFlux harmonization | Independent northern site/sensor index and BASE-BADM importer | Review ambiguous locations/depths and direct-ISMN overlap |
 | Local sensor importer | Planned | Representative files and field mapping |
-| Freeze/thaw probabilities | `sfcc-joint-1.0` implemented (`sfcc-label classify`) | Full run on all sensors; spring and cross-sensor-type transfer |
+| Freeze/thaw probabilities | `sfcc-joint-1.1` implemented (`sfcc-label classify`) | Full run on all sensors; spring and cross-sensor-type transfer |
 | Annual freeze dates | Sensor transition onset and freeze start implemented; cell summaries implemented | Freeze-end rule; comparison with SMOS L3FT |
 | EASE-Grid lookup | Working for northern 9 km and 25 km | Preferred product resolution |
 | Grid state summaries | Working counts, label shares, and mean sensor probabilities | Depth policy, sensor weighting, minimum coverage |

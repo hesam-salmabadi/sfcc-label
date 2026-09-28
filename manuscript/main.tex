@@ -179,7 +179,7 @@ groups).
 \paragraph{Frozen level observed.} Once almost all freezable water has
 turned to ice, permittivity stops falling as the soil cools further, and the
 coldest bins form a flat stretch (Fig.~\ref{fig:levels}a). We used such
-winters to learn the typical frozen level. A winter qualified when (i) its soil
+winters to learn the typical frozen level and, below, the typical curve width. A winter qualified when (i) its soil
 reached $-5$\,$^{\circ}$C, well beyond the typical $T_{fr}$, so that a flat
 stretch has room to appear; (ii) the coldest bins formed a flat stretch at
 least 0.5\,$^{\circ}$C long; and (iii) permittivity fell by more than 3 units
@@ -227,6 +227,23 @@ adopted. Fits are rejected when the soil showed less than 15\,\% of the
 expected permittivity drop, when a parameter reached its bound, or when the
 misfit of the bins colder than $T_{on}$ exceeded 30\,\% of the drop.
 
+\paragraph{Slow freezes.} In some winters the fitted curve is very wide: the
+permittivity falls slowly over several degrees, and $T_{fr}$ lies far below
+$T_{on}$. We treat such curves as unreliable, whatever the soil. As reference
+we use the fitted winters whose frozen level is seen in the data by the
+flat-stretch rule above, because only there is the whole curve measured
+(Fig.~\ref{fig:widths}). Their median width was 1.51\,$^{\circ}$C, consistent
+with the width prior, and their 90th percentile 3.07\,$^{\circ}$C. Winters
+wider than that (339 of 4,846 fitted topsoil winters, 7.0\,\%) keep their
+$T_{on}$, but $T_{fr}$ is replaced by $T_{on}$ minus the median width of
+reference winters that are not wide themselves, taken from the first of these
+groups with at least three such winters: the same sensor, the same network and
+probe type, the same probe type, the same land cover and soil texture, or all
+topsoil winters. The spread of the borrowed widths is added to the uncertainty
+of $T_{fr}$. Wide curves are more common in dry soils (16\,\% of winters with
+$\varepsilon_u \le 6$ against 2\,\% with $\varepsilon_u > 20$;
+Fig.~\ref{fig:widths}b) but are replaced there as well.
+
 Uncertainty is estimated with a bootstrap of 200 replicates that resample whole
 days with replacement and redraw the prior centres, repeating the binning and
 the fit. $T_{on}$ and $T_{fr}$ are the replicate medians and their spread the
@@ -273,6 +290,18 @@ the soil never falls below $+0.3$\,$^{\circ}$C, the frozen level relies on the
 prior, and $T_{fr}$ is highly uncertain.}
 \label{fig:example-winters}
 \end{figure*}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_widths.png}
+\caption{Curve width $T_{on}-T_{fr}$ of 4,846 fitted topsoil winters. Blue:
+winters whose frozen level is seen in the data (1,251); grey: all other fitted
+winters. The black line is the 90th percentile of the blue winters
+(3.07\,$^{\circ}$C); winters above it are treated as slow freezes. (a)
+Histogram with 0.2\,$^{\circ}$C bars, stacked. (b) Width against the unfrozen
+permittivity.}
+\label{fig:widths}
+\end{figure}
 
 \begin{figure}[t]
 \centering

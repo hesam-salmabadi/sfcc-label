@@ -33,7 +33,7 @@ from scipy.optimize import least_squares
 
 from .models import Observation, Prediction, SensorMetadata, YearlyFreezeEvent
 
-MODEL_VERSION = "sfcc-joint-1.0"
+MODEL_VERSION = "sfcc-joint-1.1"
 # Depth classes (sensor depth_cm): the method is developed and evaluated for the topsoil class only.
 # (lower, upper, lower inclusive, upper inclusive)
 DEPTH_CLASSES = {"skin": (0.0, 2.0, True, False), "topsoil": (2.5, 7.5, False, False)}
@@ -83,8 +83,14 @@ class Settings:
     extra_sd_on_c: float = 0.10              # calibrated on the realistic synthetic benchmark
     extra_sd_fr_c: tuple = (0.2, 0.5, 1.0)   # winter went >=1 degC past T_fr / <1 degC past / never reached it
     persist_days: int = 5
-    slow_width_quantile: float = 0.90        # winters wider than this quantile of well-observed widths are "slow"
-    slow_width_default_c: float = 3.0        # used when fewer than 30 well-observed winters are available
+    slow_width_quantile: float = 0.90        # winters wider than this quantile of reference widths are "slow"
+    slow_width_default_c: float = 3.0        # used when fewer than 30 reference winters are available
+    # reference winters = fitted winters whose frozen level is seen in the data (flat run of the coldest bins)
+    seen_min_coldest_c: float = -5.0         # soil must reach this temperature
+    seen_flat_tol: float = 0.10              # bins within this share of the observed sqrt(eps) drop ...
+    seen_flat_span_c: float = 0.5            # ... over at least this temperature span
+    seen_min_drop: float = 3.0               # eps_unfrozen - eps_frozen (permittivity units)
+    seen_min_frozen_eps: float = 2.0         # below the instrument minimum (~2.3, Pardo Lara et al. 2020)
     min_donors: int = 3                      # donor winters needed at a fallback level
     cross_probe_sd_c: float = 0.16           # TEROS12 vs iButton spread at co-located James Bay sites
     seed: int = 0
@@ -286,6 +292,25 @@ def fit_winter(bins: pd.Series, g_unf: float, prior, width_prior: tuple, s: Sett
     return (float(t_on), float(t_on - np.exp(lw)), float(np.sqrt(f * eps_unf))), "fitted"
 
 
+def observed_frozen_level(bins: pd.Series, g_unf: float, s: Settings) -> float | None:
+    """sqrt(eps) of the frozen level where the data show it, else None.
+
+    The coldest bins must form a flat run: starting from the coldest bin and moving warmer, every bin stays within
+    seen_flat_tol x (sqrt drop) of the median of the three coldest bins, over at least seen_flat_span_c. The soil
+    must reach seen_min_coldest_c, and the frozen level must be plausible (drop and minimum permittivity)."""
+    cold = bins[bins.index <= s.unfrozen_range_c[0]].sort_index()
+    if len(cold) < 5 or not np.isfinite(g_unf) or cold.index.min() > s.seen_min_coldest_c or g_unf <= cold.min():
+        return None
+    ref = cold.iloc[:3].median()
+    run = cold[((cold - ref).abs() <= s.seen_flat_tol * (g_unf - cold.min())).cumprod().astype(bool)]
+    if len(run) < 3 or run.index.max() - run.index.min() < s.seen_flat_span_c - 1e-9:
+        return None
+    g_fr = float(run.median())
+    if g_unf**2 - g_fr**2 <= s.seen_min_drop or g_fr**2 < s.seen_min_frozen_eps:
+        return None
+    return g_fr
+
+
 def cold_side_misfit(bins: pd.Series, g_unf: float, t_on: float, t_fr: float, g_fr: float, s: Settings) -> float:
     """RMS misfit of the bins colder than T_on + 0.3 degC, as a share of the permittivity drop (sqrt units)."""
     sel = bins[(bins.index >= s.fit_range_c[0]) & (bins.index <= t_on + 0.3)]
@@ -316,6 +341,7 @@ class WinterFit:
     t_fr_pooled_sd: float = np.nan
     slow: bool = False
     t_fr_source: str = "fit"
+    frozen_level_seen: bool = False
 
     @property
     def fitted(self) -> bool:
@@ -355,6 +381,7 @@ def fit_sensor(sensor_id: str, frame: pd.DataFrame, s: Settings = Settings(), pr
         bins = bin_medians(half, s, min_n)
         g_unf = unfrozen_level(bins, s)
         winter = WinterFit(int(fyear), "", float(half["T"].min()), g_unf**2)
+        winter.frozen_level_seen = observed_frozen_level(bins, g_unf, s) is not None
         main, status = fit_winter(bins, g_unf, prior, s.width_prior, s)
         if main is not None:
             winter.eps_frozen = main[2] ** 2
@@ -467,15 +494,16 @@ def fallbacks_for(fit: SensorFit, levels: dict) -> list:
 
 
 # --- slow freezes ----------------------------------------------------------------------------
-def _well_observed(w: WinterFit) -> bool:
-    return w.fitted and w.coldest_c <= w.t_fr - 1.0
+def _reference(w: WinterFit) -> bool:
+    return w.fitted and w.frozen_level_seen
 
 
 def apply_slow_freeze_rule(fits: list[SensorFit], s: Settings = Settings()) -> float:
-    """Winters whose fitted width exceeds the data's 90th percentile keep T_on; T_fr = T_on - donor width,
-    with donors (well-observed, not slow) taken from: same sensor -> same network and probe -> same probe -> all.
+    """Winters whose fitted width exceeds the 90th percentile of reference widths (fitted winters with a seen frozen
+    level) keep T_on; T_fr = T_on - donor width, with donors (reference, not slow) taken from: same sensor -> same
+    network and probe -> same probe -> same land cover and soil texture -> all.
     Call before pool_sensors. Returns the width cut-off used."""
-    trusted = [(f, w) for f in fits for w in f.winters.values() if _well_observed(w)]
+    trusted = [(f, w) for f in fits for w in f.winters.values() if _reference(w)]
     widths = np.array([w.t_on - w.t_fr for _, w in trusted])
     cut = float(np.quantile(widths, s.slow_width_quantile)) if len(widths) >= 30 else s.slow_width_default_c
     donors = [(f, w) for f, w in trusted if w.t_on - w.t_fr <= cut]
@@ -694,7 +722,7 @@ class SFCCProcessor:
 
 # --- batch run -------------------------------------------------------------------------------
 THRESHOLD_COLUMNS = ("sensor_id", "network", "probe", "depth_class", "land_cover_soil", "fyear", "status", "coldest_c", "eps_unfrozen",
-                     "eps_frozen", "cold_misfit", "n_boot_ok", "slow_freeze", "t_fr_source", "t_on_c", "t_on_sd_c",
+                     "eps_frozen", "cold_misfit", "n_boot_ok", "frozen_level_seen", "slow_freeze", "t_fr_source", "t_on_c", "t_on_sd_c",
                      "t_fr_c", "t_fr_sd_c", "model_version")
 EXTRA_PREDICTION_COLUMNS = ("leg", "frozen_fraction", "threshold_source")
 LOCAL_NETWORK_PROBES = {"Kenaston": "HydraProbe", "Candle Lake": "HydraProbe", "Montmorency Forest": "TEROS12",
@@ -801,7 +829,8 @@ def run_classification(catalog: pd.DataFrame, observations_root: Path, output_di
                               land_cover_soil=fit.ground,
                               fyear=w.fyear, status=w.status,
                               coldest_c=w.coldest_c, eps_unfrozen=w.eps_unfrozen, eps_frozen=w.eps_frozen,
-                              cold_misfit=w.cold_misfit, n_boot_ok=w.n_boot_ok, slow_freeze=w.slow,
+                              cold_misfit=w.cold_misfit, n_boot_ok=w.n_boot_ok,
+                              frozen_level_seen=w.frozen_level_seen, slow_freeze=w.slow,
                               t_fr_source=w.t_fr_source if ok else np.nan,
                               t_on_c=w.t_on_pooled if ok else np.nan, t_on_sd_c=w.t_on_pooled_sd if ok else np.nan,
                               t_fr_c=w.t_fr_pooled if ok else np.nan, t_fr_sd_c=w.t_fr_pooled_sd if ok else np.nan,

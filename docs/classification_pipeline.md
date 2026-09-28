@@ -1,6 +1,6 @@
 # Freeze/thaw classification — step by step
 
-Model version **`sfcc-joint-1.0`**, implemented in `src/sfcc_label/classify.py` and run with
+Model version **`sfcc-joint-1.1`**, implemented in `src/sfcc_label/classify.py` and run with
 `sfcc-label classify`. This page explains the method in plain terms. The formal description is in
 [classification_methods.md](classification_methods.md).
 
@@ -78,12 +78,14 @@ A winter is **not fitted** when:
 - the curve misses the cold-side points by more than 30 % of the drop → `poor_fit`,
 - fewer than half of the bootstrap rounds (step 6) succeed → `unstable_bootstrap`.
 
-**Slow freezes.** When a winter's fitted width (T_on − T_fr) is wider than 90 % of the well-observed winters
-in the run (winters whose soil went at least 1 °C past T_fr; the cut-off was 3.2 °C in the first test run), the
-curve has lost its shape: T_on is kept, but T_fr = T_on − a **donor width**. Donors are well-observed,
-non-slow winters, taken from the first level with at least 3 of them: the same sensor's other winters → the
-same network and probe type → the same probe type → the same land cover and soil texture → all. The donors' spread becomes T_fr's uncertainty and
-`t_fr_source` records the level.
+**Slow freezes.** Reference winters are fitted winters whose frozen level is visible in the data: the soil
+reached −5 °C and the coldest bins form a flat run at least 0.5 °C long (each bin within 10 % of the total √ε drop
+of the three coldest bins), with a drop of more than 3 permittivity units. When a winter's fitted width
+(T_on − T_fr) is wider than 90 % of the reference winters (3.07 °C for topsoil), the curve is not trusted —
+whatever the soil: T_on is kept, but T_fr = T_on − a **donor width**. Donors are non-slow reference winters,
+taken from the first level with at least 3 of them: the same sensor's other winters → the same network and
+probe type → the same probe type → the same land cover and soil texture → all. The donors' spread becomes
+T_fr's uncertainty and `t_fr_source` records the level; `frozen_level_seen` marks reference winters.
 
 BJ06: frozen level ε ≈ 5.0; **T_on = +0.60 °C, T_fr = +0.16 °C** (positive values reflect the TEROS12
 thermistor offset, as in Salmabadi et al. 2026).
@@ -149,7 +151,7 @@ Within 1 Aug – 1 Mar:
 
 ```bash
 python -m pip install -e '.[classify]'
-sfcc-label classify --output-dir /path/to/private-data/processed/sfcc-joint-1.0 \
+sfcc-label classify --output-dir /path/to/private-data/processed/sfcc-joint-1.1 \
   --source local --network "James Bay" --workers 8
 ```
 

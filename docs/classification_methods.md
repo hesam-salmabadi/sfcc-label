@@ -1,6 +1,6 @@
 # Methods: probabilistic soil freeze/thaw state from in situ observations
 
-*Draft methods text for model version `sfcc-joint-1.0` (`src/sfcc_label/classify.py`). A plain-language
+*Draft methods text for model version `sfcc-joint-1.1` (`src/sfcc_label/classify.py`). A plain-language
 walk-through is in [classification_pipeline.md](classification_pipeline.md).*
 
 ## Soil freezing characteristic curve in permittivity–temperature space
@@ -50,7 +50,7 @@ hourly), which equalises the weight of temperature ranges irrespective of reside
 fraction f = ε_r/ε_u were estimated jointly by bounded least squares on √ε in the bins between −4 and
 +2.5 °C, with residuals scaled by the robust scatter of the unfrozen bins and two prior penalty terms:
 f ~ N(0.44, 0.14²) and ln w ~ N(ln 1.45, 0.7²). The priors were derived from 1,326 real winters at 492 sensors
-that reached below −5 °C and showed a clear residual plateau (frozen/unfrozen permittivity ratio: median
+whose frozen level is seen in the data (see below) (frozen/unfrozen permittivity ratio: median
 0.44, 10th–90th percentile 0.24–0.60; median 10–75 % width 1.45 °C). The prior on f was preferred over a
 regression on SoilGrids clay, organic carbon, bulk density and probe type, which reduced the
 leave-one-site-out error only marginally (median absolute error 1.01 vs 1.16 permittivity units); that
@@ -58,14 +58,18 @@ regression is retained as an optional prior. Fits were rejected when the winter 
 expected drop, when a parameter reached a bound, or when the RMS misfit of bins colder than T_on + 0.3 °C
 exceeded 30 % of the fitted drop.
 
-Winters whose fitted width T_on − T_fr exceeded the 90th percentile of well-observed widths in the run
-(winters whose minimum soil temperature was at least 1 °C below T_fr) were treated as slow freezes whose
-curve shape does not constrain T_fr. For these, T_on was retained and T_fr was set to T_on minus the median
-width of donor winters (well-observed and not slow), taken from the first level with at least three donors:
-the same sensor, the same network and temperature-probe type, the same probe type, or all winters; the
-donors' standard deviation was propagated into T_fr. Slow freezes were more frequent in dry soils (volumetric
-water content ≤ 0.15: 26–30 % of winters favoured a gradual curve vs 14–18 % otherwise) and in clay-rich
-soils (> 35 % clay: 31 %).
+Winters whose fitted width T_on − T_fr exceeded the 90th percentile of reference widths were treated as slow
+freezes whose curve shape does not constrain T_fr. Reference winters are fitted winters whose frozen level is
+seen in the data: the soil reached −5 °C, the coldest bins form a flat run (every bin within 10 % of the √ε drop
+of the median of the three coldest bins, over at least 0.5 °C), the drop exceeds 3 permittivity units and the
+frozen level is at least 2 (instrument minimum ≈ 2.3; Pardo Lara et al., 2020). The same rule selected the
+winters behind the priors. For slow winters, T_on was retained and T_fr was set to T_on minus the median width
+of non-slow reference winters, taken from the first level with at least three of them: the same sensor, the
+same network and temperature-probe type, the same probe type, the same land cover and soil texture, or all
+winters; the donors' standard deviation was propagated into T_fr. No soil is exempt. In the topsoil class the
+reference widths had a median of 1.51 °C and a 90th percentile of 3.07 °C, and 339 of 4,846 fitted winters
+(7.0 %) were slow; wide curves were more frequent in dry soils (16 % of winters with ε_u ≤ 6 vs 2 % with
+ε_u > 20) and showed no relation to SoilGrids clay.
 
 ## Uncertainty and pooling
 

@@ -1,6 +1,6 @@
 # Classification — open items
 
-Model `sfcc-joint-1.0` is developed and evaluated for the **topsoil class (2.5 cm < depth < 7.5 cm, plus 0–5 cm integrating probes)** only.
+Model `sfcc-joint-1.1` is developed and evaluated for the **topsoil class (2.5 cm < depth < 7.5 cm, plus 0–5 cm integrating probes)** only.
 `sfcc-label classify` processes that class by default. Items below are deliberately postponed.
 
 ## Depth

@@ -1,7 +1,8 @@
 """Winters with an observed (clean) frozen permittivity level, used to derive the frozen-fraction prior.
 
-A winter qualifies when its freezing half reaches <= -5 degC, the coldest temperature bins form a flat run
-(within 10 % of the observed drop, spanning >= 0.5 degC) and the drop exceeds 3 permittivity units.
+A winter qualifies when sfcc_label.classify.observed_frozen_level finds its frozen level: the soil reaches -5 degC,
+the coldest bins form a flat run (within 10 % of the observed drop, spanning >= 0.5 degC), the drop exceeds 3
+permittivity units and the frozen level is at least 2.
 Reads the private data volume; writes manuscript/data/frozen_level_winters.csv.
 Run: python manuscript/scripts/frozen_level_winters.py [workers]
 """
@@ -15,17 +16,6 @@ from common import DATA, ROOT
 from sfcc_label import classify as c
 
 S = c.Settings()
-
-
-def plateau(bins, g_unf, tol=0.10, span=0.5):
-    cold = bins[bins.index <= S.unfrozen_range_c[0]].sort_index()
-    if len(cold) < 5 or not np.isfinite(g_unf) or g_unf - cold.min() <= 0:
-        return None
-    ref = cold.iloc[:3].median()
-    run = cold[((cold - ref).abs() <= tol * (g_unf - cold.min())).cumprod().astype(bool)]
-    if len(run) < 3 or run.index.max() - run.index.min() < span - 1e-9:
-        return None
-    return float(run.median())
 
 
 def sensor_winters(row):
@@ -45,10 +35,8 @@ def sensor_winters(row):
             continue
         bins = c.bin_medians(half, S, min_n)
         g_unf = c.unfrozen_level(bins, S)
-        if not np.isfinite(g_unf) or bins.index.min() > -5:
-            continue
-        g_fr = plateau(bins, g_unf)
-        if g_fr is None or g_unf**2 - g_fr**2 <= 3 or g_fr**2 < 2:
+        g_fr = c.observed_frozen_level(bins, g_unf, S)
+        if g_fr is None:
             continue
         out.append(dict(sensor_id=row["sensor_id"], source=row["source"], network=row.get("network"),
                         depth_cm=row.get("depth_cm"), depth_from_cm=row.get("depth_from_cm"),

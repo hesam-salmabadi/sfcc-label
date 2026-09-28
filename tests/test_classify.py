@@ -121,6 +121,7 @@ def test_slow_freeze_keeps_onset_and_borrows_width():
     for f in donors + [slow]:
         f.network, f.probe = "net", "meter"
     t_on_before = slow.winters[2020].t_on
+    assert all(d.winters[2020].frozen_level_seen for d in donors)
     apply_slow_freeze_rule(donors + [slow], Settings(n_boot=20, n_mc=100, slow_width_default_c=3.0))
     w = slow.winters[2020]
     assert w.slow and w.t_fr_source == "donor_network_probe"
@@ -191,3 +192,9 @@ def test_temperature_only_network_borrows_matching_land_cover_and_soil():
     pool_sensors(donors + [other, lonely])
     chain = fallbacks_for(lonely, fallback_levels(donors + [other, lonely]))
     assert chain[0][0] == "land_cover_soil_average" and chain[0][2] is False
+
+
+def test_frozen_level_seen_needs_cold_flat_run():
+    cold = fit_sensor("cold", synthetic(tmin=-8), FAST).winters[2020]
+    mild = fit_sensor("mild", synthetic(tmin=-3), FAST).winters[2020]
+    assert cold.frozen_level_seen and not mild.frozen_level_seen

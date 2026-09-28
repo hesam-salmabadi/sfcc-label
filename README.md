@@ -5,7 +5,7 @@ A Python package skeleton for turning in situ soil observations into probabilist
 The project has three stages:
 
 1. **Prepare data:** harmonize ISMN, AmeriFlux, and locally collected records into one metadata table and one hourly CSV per sensor.
-2. **Classify:** fit a soil freezing characteristic curve per sensor-winter and produce per-hour probabilities of thawed / transition / frozen soil and yearly freeze dates (`sfcc-label classify`, model `sfcc-joint-1.0`; see [docs/classification_pipeline.md](docs/classification_pipeline.md)).
+2. **Classify:** fit a soil freezing characteristic curve per sensor-winter and produce per-hour probabilities of thawed / transition / frozen soil and yearly freeze dates (`sfcc-label classify`, model `sfcc-joint-1.1`; see [docs/classification_pipeline.md](docs/classification_pipeline.md)).
 3. **Serve gridded results:** map stations to Northern Hemisphere EASE-Grid 2.0 cells, summarize sampled states by cell and hour, and query the resulting records. A full-coverage product would require a separate spatial model.
 
 See [WORKFLOW.md](WORKFLOW.md) for the end-to-end project plan and the decisions still needed.
@@ -745,7 +745,7 @@ frozen) from Monte Carlo draws, and each freeze year gets a transition onset and
 
 ```bash
 python -m pip install -e '.[classify]'
-sfcc-label classify --output-dir /path/to/private-data/processed/sfcc-joint-1.0 \
+sfcc-label classify --output-dir /path/to/private-data/processed/sfcc-joint-1.1 \
   --source local --network "James Bay" --workers 8
 ```
 

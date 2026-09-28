@@ -8,7 +8,6 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from common import COLORS as C, FIGURES, ROOT, style
-from frozen_level_winters import plateau
 from sfcc_label import classify as c
 
 CASES = [("local_ec06_005cm_s1", 2014, "(a) frozen level observed", "EC06"),
@@ -33,11 +32,11 @@ for ax, (sid, fy, title, name) in zip(axes, CASES):
     warm = bins[(bins.index >= lo) & (bins.index <= hi)]
     ax.scatter(warm.index, warm.values**2, s=7, color=C["thawed"], zorder=3)
     ax.axhline(eu, color=C["thawed"], lw=1, ls="--")
-    pl = plateau(bins, g_unf) if bins.index.min() <= -5 else None
+    pl = c.observed_frozen_level(bins, g_unf, S)
     if pl is not None:
         cold = bins[bins.index <= lo].sort_index()
         ref = cold.iloc[:3].median()
-        run = cold[((cold - ref).abs() <= 0.10 * (g_unf - cold.min())).cumprod().astype(bool)]
+        run = cold[((cold - ref).abs() <= S.seen_flat_tol * (g_unf - cold.min())).cumprod().astype(bool)]
         ax.scatter(run.index, run.values**2, s=16, facecolor="none", edgecolor=C["frozen"], lw=0.8, zorder=4)
         ax.axhline(pl**2, color=C["frozen"], lw=1.2)
     if w.fitted:

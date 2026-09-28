@@ -10,6 +10,8 @@ volume (`SFCC_DATA_ROOT`, default `/Volumes/Expansion/sfcc-label-data`). Install
 | `fig_frozen_fraction.py` | `../figures/fig_frozen_fraction.png` (needs the table above) |
 | `fig_binning.py` | `../figures/fig_binning.png` — binning of the Kenaston EC02 2017–18 freezing leg |
 | `fig_example_winters.py` | `../figures/fig_example_winters.png` — Kenaston EC06 2014–15 and James Bay BJ04 2020–21 |
+| `winter_widths.py [workers]` | `../data/winter_widths.csv` — production per-winter fit of every topsoil sensor (≈ 1 h) |
+| `fig_widths.py` | `../figures/fig_widths.png` — curve widths and the slow-freeze cut-off (needs the table above) |
 | `fig_levels.py` | `../figures/fig_levels.png` — unfrozen and frozen levels for Kenaston EC06 2014–15, UG21 2014–15 and James Bay BJ04 2020–21 |
 
 `../data/` holds derived tables from records that cannot be redistributed and is not committed.
