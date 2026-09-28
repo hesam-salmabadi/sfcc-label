@@ -1,4 +1,4 @@
-"""Boundary for the scientific model, pending its specification."""
+"""Boundary for the scientific model; the SFCC implementation is classify.SFCCProcessor."""
 
 from typing import Protocol
 
@@ -20,7 +20,7 @@ def process_sensor(sensor: SensorMetadata, hours: list[Observation],
                    processor: FreezeThawProcessor | None = None
                    ) -> tuple[list[Prediction], list[YearlyFreezeEvent]]:
     if processor is None:
-        raise NotImplementedError("Freeze/thaw algorithm and annual event rules are not specified yet")
+        raise NotImplementedError("pass a processor, e.g. sfcc_label.classify.SFCCProcessor")
     predictions = processor.predict(sensor, hours)
     events = processor.yearly_events(sensor, predictions)
     if any(prediction.sensor_id != sensor.sensor_id or

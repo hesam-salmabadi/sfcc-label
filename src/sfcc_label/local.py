@@ -29,11 +29,19 @@ MISSING_SENTINELS = {9999.0, -9999.0}
 PUBLISHER_IBUTTON_SITE = re.compile(r"N[IT]\d+")
 SEPARATE_SOURCE_NETWORKS = {"Alaska ISMN", "RISMA ISMN", "Cambridge Bay", "Dryden", "Chapleau", "St_Marthe", "St_Maurice", "BERMS"}
 SEPARATE_IBUTTON_NETWORKS = {"James Bay", "Montmorency Forest", "Kuujjuarapik"}
+# Level-0 tables whose probe temperature gaps were filled with the co-located iButton record: every
+# soil_temp without bulk_edc equals the iButton file (checked for all BJ sites, 2014-2022). Keep only the
+# probe's own temperature; the iButton series is imported separately (import-ibutton-transect).
+IBUTTON_FILLED_NETWORKS = {"James Bay"}
 BERMS_5CM_SITES = {"BS01", "JP01"}
 
 
 class ConflictingSampleError(ValueError):
     """One site has incompatible values recorded at an identical timestamp."""
+
+
+class NoProbeDataError(ValueError):
+    """Nothing remains for a site once iButton-filled temperatures are removed."""
 
 
 def _source_number(value: str | None, path: Path, line: int, column: str) -> float | None:
@@ -136,6 +144,8 @@ def _write_site(spool: Path, output: Path, site_id: str, source_file: str,
         for index, value in enumerate(values):
             if value is not None:
                 hourly[hour][index].append(value)
+    if not hourly:
+        raise NoProbeDataError(f"{site_id}: no probe measurements after removing iButton-filled temperature")
     first, last = min(hourly), max(hourly)
     counts = [0, 0, 0]
     total_hours = 0
@@ -228,7 +238,11 @@ def import_local(input_dir: str | Path, metadata_path: str | Path,
                             handle = stack.enter_context((spool_dir / f"{site_id}.csv").open(
                                 "w", newline="", encoding="utf-8"))
                             writers[site_id] = csv.writer(handle)
-                        writers[site_id].writerow((row["datetime"], row["soil_temp"],
+                        temperature = row["soil_temp"]
+                        if (metadata[site_id].network in IBUTTON_FILLED_NETWORKS
+                                and _source_number(row["bulk_edc"], path, reader.line_num, "bulk_edc") is None):
+                            temperature = ""
+                        writers[site_id].writerow((row["datetime"], temperature,
                                                    row["soil_moist"], row["bulk_edc"]))
                         counts[site_id] += 1
                 print(f"Local import staged {path.name}: {sum(counts.values())} source rows", flush=True)
@@ -240,6 +254,11 @@ def import_local(input_dir: str | Path, metadata_path: str | Path,
                 rows.append(_write_site(spool_dir / f"{site_id}.csv", output, site_id,
                                         source_files[site_id], counts[site_id]))
                 completed.append(site_id)
+            except NoProbeDataError as exc:
+                rows.append({"site_id": site_id, "sensor_id": metadata[site_id].sensor_id,
+                             "status": "skipped_no_probe_data", "detail": str(exc),
+                             "source_file": source_files[site_id], "source_rows": counts[site_id]})
+                print(f"Skipped {site_id}: {exc}", flush=True)
             except ConflictingSampleError as exc:
                 if not skip_conflicting_sites:
                     raise

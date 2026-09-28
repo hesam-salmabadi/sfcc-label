@@ -5,7 +5,7 @@ A Python package skeleton for turning in situ soil observations into probabilist
 The project has three stages:
 
 1. **Prepare data:** harmonize ISMN, AmeriFlux, and locally collected records into one metadata table and one hourly CSV per sensor.
-2. **Classify:** use a future, versioned processor to produce per-hour class probabilities and yearly freeze onset / freeze end dates. The scientific algorithm has not yet been specified, so this stage deliberately raises `NotImplementedError`.
+2. **Classify:** fit a soil freezing characteristic curve per sensor-winter and produce per-hour probabilities of thawed / transition / frozen soil and yearly freeze dates (`sfcc-label classify`, model `sfcc-joint-1.0`; see [docs/classification_pipeline.md](docs/classification_pipeline.md)).
 3. **Serve gridded results:** map stations to Northern Hemisphere EASE-Grid 2.0 cells, summarize sampled states by cell and hour, and query the resulting records. A full-coverage product would require a separate spatial model.
 
 See [WORKFLOW.md](WORKFLOW.md) for the end-to-end project plan and the decisions still needed.
@@ -23,6 +23,7 @@ python -m pytest
 ```
 
 Install the optional raster tools with `python -m pip install -e '.[test,geo]'` for SoilGrids and ESA CCI land cover.
+Install `python -m pip install -e '.[classify]'` (numpy, scipy, pandas) for the freeze/thaw classifier.
 
 ## Data contract
 
@@ -147,6 +148,12 @@ sfcc-label import-local /path/to/level_0 \
   --sensors-file /path/to/private-data/metadata/local_sensors.csv \
   --status-file /path/to/private-data/metadata/local_import_status.csv
 ```
+
+For James Bay, the level-0 table filled TEROS12 temperature gaps with the co-located 5 cm iButton and averaged
+the two where both existed; the importer keeps temperature only on rows with TEROS12 permittivity, so the
+iButton series lives only in `standardized/james_bay` (sites without any TEROS12 data, e.g. BJ07, are skipped).
+The eight BJ files were regenerated on 2026-09-28; the originals are in
+`archive/local_bj_ibutton_fill_20260928`.
 
 Source timestamps are **treated as declared UTC**, with no timezone test or
 conversion. Subhourly readings are averaged independently for temperature,
@@ -725,3 +732,26 @@ data/landcover/               land-cover rasters (ignored)
 src/sfcc_label/               data contract, grid, aggregation, CLI
 tests/                        contract and grid checks
 ```
+
+## Freeze/thaw classification
+
+`sfcc-label classify` turns the standardized hourly files into freeze/thaw probabilities. For every
+sensor-winter it bins permittivity (or Topp-converted water content) by soil temperature, fits a Bai-type soil
+freezing curve jointly with the frozen permittivity level, and reads two thresholds: **T_on** (10 % of the
+water frozen) and **T_fr** (75 % frozen). A day-block bootstrap gives their uncertainty; unfitted winters and
+temperature-only sensors borrow the sensor or network average. Each hour then gets P(thawed / transition /
+frozen) from Monte Carlo draws, and each freeze year gets a transition onset and a freeze start (first run of
+≥ 5 frozen days).
+
+```bash
+python -m pip install -e '.[classify]'
+sfcc-label classify --output-dir /path/to/private-data/processed/sfcc-joint-1.0 \
+  --source local --network "James Bay" --workers 8
+```
+
+Only topsoil sensors (2.5 cm < depth < 7.5 cm) are processed by default (`--depth-class`).
+Outputs: `thresholds.csv`, `predictions/<sensor_id>.csv.gz` (the package prediction format plus `leg`,
+`frozen_fraction` and `threshold_source`), `yearly_events.csv`, and `manifest.json` (settings, slow-freeze
+cut-off and fallback averages). The method is described step by step in
+[docs/classification_pipeline.md](docs/classification_pipeline.md) and formally in
+[docs/classification_methods.md](docs/classification_methods.md).

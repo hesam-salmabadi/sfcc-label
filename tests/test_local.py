@@ -120,3 +120,23 @@ def test_local_import_excludes_publisher_ibutton_sites(tmp_path):
     assert [row["site_id"] for row in rows] == ["CP01"]
     assert set(load_metadata(tmp_path / "sensors.csv")) == {"local_cp01_000-010cm_s1"}
     assert sorted(path.name for path in output.glob("*.csv")) == ["local_cp01_000-010cm_s1.csv"]
+
+
+def test_james_bay_temperature_kept_only_with_probe_permittivity(tmp_path):
+    metadata = tmp_path / "metadata.csv"
+    metadata.write_text("Site ID,Network Name,Coordinates_Lat,Coordinates_Lon,Sensor Depth (cm)\n"
+                        "BJ01,James Bay,53.4,-75.0,5\n")
+    source = tmp_path / "level0"
+    source.mkdir()
+    (source / "BJ.csv").write_text("datetime,site_id,soil_temp,soil_moist,bulk_edc\n"
+                                   "2016-10-01 00:00:00,BJ01,4.5,,\n"
+                                   "2020-10-01 01:00:00,BJ01,3.9,0.21,14.2\n"
+                                   "2016-10-01 00:00:00,BJ07,2.0,,\n")
+    metadata.write_text(metadata.read_text() + "BJ07,James Bay,53.2,-75.0,5\n")
+    output = tmp_path / "out"
+    rows = import_local(source, metadata, output, tmp_path / "sensors.csv", tmp_path / "status.csv")
+    assert {r["site_id"]: r["status"] for r in rows}["BJ07"] == "skipped_no_probe_data"
+    assert not (output / "local_bj07_005cm_s1.csv").exists()
+    hours = read_observations(output / "local_bj01_005cm_s1.csv")
+    assert len(hours) == 1 and hours[0].timestamp_utc.year == 2020   # the 2016 iButton-filled row is dropped
+    assert (hours[0].soil_temperature_c, hours[0].raw_value) == (3.9, 14.2)

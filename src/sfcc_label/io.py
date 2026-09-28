@@ -38,10 +38,19 @@ def _utc_hour(value: str) -> datetime:
     return instant
 
 
-def _read_csv(path: str | Path, columns: tuple[str, ...]):
-    with Path(path).open(newline="", encoding="utf-8-sig") as stream:
+def _open_text(path: str | Path):
+    path = Path(path)
+    if path.suffix == ".gz":
+        import gzip
+        return gzip.open(path, "rt", newline="", encoding="utf-8-sig")
+    return path.open(newline="", encoding="utf-8-sig")
+
+
+def _read_csv(path: str | Path, columns: tuple[str, ...], extra_columns: bool = False):
+    with _open_text(path) as stream:
         reader = csv.DictReader(stream)
-        if reader.fieldnames is None or tuple(reader.fieldnames) != columns:
+        names = None if reader.fieldnames is None else tuple(reader.fieldnames)
+        if names is None or (names[:len(columns)] if extra_columns else names) != columns:
             raise ValueError(f"{path}: expected columns {', '.join(columns)}")
         for line_number, row in enumerate(reader, start=2):
             try:
@@ -118,7 +127,7 @@ def _format_number(value: float | None) -> str:
 def read_predictions(path: str | Path, sensor_id: str) -> list[Prediction]:
     predictions = []
     previous = None
-    for row in _read_csv(path, PREDICTION_COLUMNS):
+    for row in _read_csv(path, PREDICTION_COLUMNS, extra_columns=True):   # classifier adds leg, fraction, source
         timestamp = _utc_hour(row["timestamp_utc"])
         if previous is not None and timestamp <= previous:
             raise ValueError(f"{path}: prediction timestamps must increase")

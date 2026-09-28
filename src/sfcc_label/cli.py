@@ -69,6 +69,42 @@ def _import_ameriflux_task(task):
         return "error", 0, str(exc)
 
 
+def _classify(args) -> None:
+    import pandas as pd
+    from .classify import Settings, run_classification
+    import subprocess
+    from .classify import catalog_probes, depth_class
+    catalog = pd.read_csv(args.catalog, low_memory=False)
+    catalog = catalog[catalog["depth_cm"].map(depth_class) == args.depth_class]
+    pairing = args.catalog.parent / "ismn_pairing.csv"
+    catalog["probe"] = catalog_probes(catalog, pd.read_csv(pairing) if pairing.exists() else None)
+    land_cover = args.catalog.parent / "sensor_landcover_cci.csv"
+    soil = args.catalog.parent / "sensor_soil.csv"
+    if land_cover.exists():
+        lc = pd.read_csv(land_cover, usecols=["sensor_id", "sensor_class"]).drop_duplicates("sensor_id")
+        catalog = catalog.merge(lc.rename(columns={"sensor_class": "land_cover"}), on="sensor_id", how="left")
+    if soil.exists():
+        tex = pd.read_csv(soil, usecols=["sensor_id", "texture_class_usda"]).drop_duplicates("sensor_id")
+        catalog = catalog.merge(tex.rename(columns={"texture_class_usda": "soil_texture"}), on="sensor_id", how="left")
+    for column, wanted in (("source", args.source), ("network", args.network), ("sensor_id", args.sensor)):
+        if wanted:
+            catalog = catalog[catalog[column].isin(wanted)]
+    if catalog.empty:
+        raise ValueError("no catalog rows match the requested sources/networks/sensors")
+    if args.output_dir.exists() and any(args.output_dir.iterdir()):
+        raise FileExistsError(f"{args.output_dir} is not empty")
+    repo = Path(__file__).resolve().parents[2]
+    git = lambda *cmd: subprocess.run(["git", "-C", str(repo), *cmd], capture_output=True, text=True).stdout.strip()
+    run_info = dict(depth_class=args.depth_class, git_commit=git("rev-parse", "HEAD") or "unknown",
+                    git_uncommitted_changes=bool(git("status", "--porcelain", "--untracked-files=no")),
+                    catalog=str(args.catalog), started_utc=datetime.now(timezone.utc).isoformat())
+    summary = run_classification(catalog, args.observations_root, args.output_dir, args.flags_root,
+                                 Settings(n_boot=args.bootstrap, seed=args.seed), args.workers, run_info)
+    print(f"{summary['model_version']}: processed {summary['processed_sensors']} of {summary['sensors']} sensors; "
+          f"fitted {summary['fitted_winters']} of {summary['winters']} winters; wrote predictions for "
+          f"{summary['predicted_sensors']} sensors; errors {len(summary['errors'])}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="sfcc-label")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -247,8 +283,24 @@ def main() -> None:
     tvc_hp_import.add_argument("--observations-dir", required=True, type=Path)
     tvc_hp_import.add_argument("--sensors-file", required=True, type=Path)
     tvc_hp_import.add_argument("--context-file", required=True, type=Path)
+    classify = subparsers.add_parser(
+        "classify", help="fit freeze/thaw thresholds and write hourly state probabilities (needs [classify])")
+    classify.add_argument("--catalog", type=Path, default=DATA_ROOT / "metadata/catalog.csv")
+    classify.add_argument("--observations-root", type=Path, default=DATA_ROOT / "standardized")
+    classify.add_argument("--flags-root", type=Path, default=DATA_ROOT / "flags")
+    classify.add_argument("--output-dir", type=Path, required=True)
+    classify.add_argument("--source", action="append", help="only these sources (repeatable)")
+    classify.add_argument("--network", action="append", help="only these networks (repeatable)")
+    classify.add_argument("--sensor", action="append", help="only these sensor IDs (repeatable)")
+    classify.add_argument("--bootstrap", type=int, default=200)
+    classify.add_argument("--seed", type=int, default=0)
+    classify.add_argument("--workers", type=int, default=1)
+    classify.add_argument("--depth-class", default="topsoil", choices=["topsoil", "skin"],
+                          help="only sensors in this depth class (topsoil: 2.5 < d < 7.5 cm; skin: 0 <= d < 2 cm, not yet evaluated)")
     args = parser.parse_args()
-    if args.command == "cell":
+    if args.command == "classify":
+        _classify(args)
+    elif args.command == "cell":
         print(grid_cell(args.latitude, args.longitude, args.resolution).cell_id)
     elif args.command == "index-ismn":
         files, issues = scan_ismn(args.root)

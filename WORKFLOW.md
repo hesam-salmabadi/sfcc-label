@@ -74,13 +74,11 @@ A versioned processor will consume a sensor's metadata and hourly series and ret
 P(frozen), P(transition), P(thawed)
 ```
 
-For a classified hour the probabilities sum to 1; the largest gives the label. For an hour the model cannot classify, all three probabilities should be missing rather than set to zero. Output goes to `data/processed/<sensor_id>.csv`, with `model_version` on each row. The processor interface is present in the package, but its scientific logic intentionally awaits your rules.
-
-We will need to define which inputs are required, how missing moisture is handled, what “transition” means physically, how probabilities are calibrated, and how the model is validated across sites and years. Different sensor types may need different feature extraction before the common classifier.
+For a classified hour the probabilities sum to 1; the largest gives the label. For an hour the model cannot classify, all three probabilities are missing rather than set to zero. Model `sfcc-joint-1.0` (`sfcc-label classify`, `src/sfcc_label/classify.py`) fits a soil freezing characteristic curve in permittivity–temperature space for each sensor-winter, reads the 10 % (onset) and 75 % (frozen) thresholds with bootstrap uncertainty, and draws hourly probabilities; winters or sensors without a fit borrow the sensor or network average. See [docs/classification_pipeline.md](docs/classification_pipeline.md) and [docs/classification_methods.md](docs/classification_methods.md).
 
 ## 5. Derive annual freeze events
 
-From hourly probabilities or labels, derive `freeze_start_utc` and `freeze_end_utc` for each sensor and year. These dates should be a separate table because they summarize a season rather than an hour. We still need your definitions for the year boundary, minimum persistence, short thaw interruptions, multiple freeze cycles, and incomplete records. The model version and event-rule version should be recorded so results remain reproducible.
+From hourly probabilities, `sfcc-label classify` writes one row per sensor and freeze year (1 Aug–31 Jul): the transition onset and the freeze start, each the first day on or before 1 March that begins at least five consecutive days whose majority label is not thawed / frozen (Rautiainen et al. 2025). Days need at least 75 % of the logger's possible readings. A freeze-end rule is not defined yet.
 
 For each cell and year, **retain all sensor-level event dates**. After land-cover screening, the agreed cell summary reports the **median, earliest, and latest** freeze-start dates, and separately the median, earliest, and latest freeze-end dates. Each has its own contributing sensor count because one event may be missing while the other is known. Missing dates are excluded from that event's statistics. These are summaries of sampled sensors, not dates on which the entire cell froze or thawed. The `aggregate_yearly_events` helper implements this summary for supplied per-sensor events; it does not determine the events themselves. Only combine sensors at comparable depths, and keep the method version in the output.
 
@@ -122,8 +120,8 @@ Today this filters records already loaded in memory. The future public interface
 | MODIS land-cover screening | Annual metadata, grid builder, and exact-match gate implemented | Annual MCD12Q1 IGBP mosaics and sensor coordinates |
 | AmeriFlux harmonization | Independent northern site/sensor index and BASE-BADM importer | Review ambiguous locations/depths and direct-ISMN overlap |
 | Local sensor importer | Planned | Representative files and field mapping |
-| Freeze/thaw probabilities | Processor interface only | Scientific labeling method and training/validation plan |
-| Annual freeze dates | Cell median, range, and counts implemented for supplied sensor events | Sensor-level event definitions |
+| Freeze/thaw probabilities | `sfcc-joint-1.0` implemented (`sfcc-label classify`) | Full run on all sensors; spring and cross-sensor-type transfer |
+| Annual freeze dates | Sensor transition onset and freeze start implemented; cell summaries implemented | Freeze-end rule; comparison with SMOS L3FT |
 | EASE-Grid lookup | Working for northern 9 km and 25 km | Preferred product resolution |
 | Grid state summaries | Working counts, label shares, and mean sensor probabilities | Depth policy, sensor weighting, minimum coverage |
 | Full-coverage grid | Planned | Spatial model and independent validation |
