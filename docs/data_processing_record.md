@@ -323,6 +323,26 @@ The sensor-metadata columns `land_cover`, `land_cover_source` and
 Bay's field land cover, which remains in `cambridge_bay_context.csv`. Backup in
 `archive/drop_columns_20260927/`.
 
+### Step 7b — Biome and ecoregion (2026-09-29)
+
+Source: RESOLVE Ecoregions 2017 (Dinerstein et al., 2017; CC BY 4.0), shapefile
+`sources/resolve_ecoregions/Ecoregions2017.shp` (846 ecoregions, 14 biomes). ESA CCI describes vegetation
+structure, not climate, so it cannot tell boreal from temperate forest or tundra from prairie grassland.
+
+1. `sfcc-label biome-sensors` (`sfcc_label/biome.py`, needs `.[biome]`) assigns each sensor location the
+   ecoregion polygon that contains it.
+2. Locations outside every polygon (coasts, lake shores) take the nearest ecoregion within 5 km; the distance is
+   in `snap_distance_m` (17 sensors, at most 2.8 km). No sensor is left without a biome.
+3. Output `metadata/sensor_biome.csv`: `sensor_id, source, site_id, latitude, longitude, biome_num, biome,
+   ecoregion, realm, snap_distance_m`.
+
+The detailed ESA CCI class (`cci_class` in `sensor_landcover_cci.csv`) is kept beside the six SMOS classes;
+`sfcc_label.landcover_cci.CCI_NAMES` gives the class names.
+
+Sensors per biome: temperate broadleaf and mixed forests 4,048; temperate grasslands, savannas and shrublands
+3,914; temperate conifer forests 3,248; deserts and xeric shrublands 2,578; boreal forests/taiga 925; tundra
+847; montane grasslands 555; Mediterranean 485; other biomes 490.
+
 ### Step 8 — Evaluated and rejected: moss/lichen
 
 No gridded moss/lichen thickness product exists at these scales. The
@@ -405,6 +425,7 @@ The CCI source is
 - Brodzik, M. J., Billingsley, B., Haran, T., Raup, B., and Savoie, M. H.: EASE-Grid 2.0: Incremental but significant improvements for Earth-gridded data sets, ISPRS Int. J. Geo-Inf., 1, 32–45, 2012.
 - Dorigo, W. et al.: The International Soil Moisture Network: serving Earth system science for over a decade, Hydrol. Earth Syst. Sci., 25, 5749–5804, 2021.
 - ESA: Land Cover CCI Product User Guide, Version 2.0, 2017.
+- Dinerstein, E. et al.: An ecoregion-based approach to protecting half the terrestrial realm, BioScience, 67, 534–545, 2017.
 - Poggio, L. et al.: SoilGrids 2.0: producing soil information for the globe with quantified spatial uncertainty, SOIL, 7, 217–240, 2021.
 - Rautiainen, K. et al.: An operational SMOS soil freeze–thaw product, Earth Syst. Sci. Data, 17, 5337–5353, https://doi.org/10.5194/essd-17-5337-2025, 2025.
 - Buchhorn, M. et al.: Copernicus Global Land Service: Land Cover 100m: collection 3: epoch 2015: Globe (v3.0.1), Zenodo, https://doi.org/10.5281/zenodo.3939038, 2020 (evaluated, not used).

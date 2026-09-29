@@ -44,10 +44,14 @@ LAYER_CLASSES = {(0.0, 5.0): "topsoil"}
 
 
 def depth_class(depth_cm, depth_from_cm=None, depth_to_cm=None) -> str | None:
-    """'skin' for 0 <= d < 2 cm, 'topsoil' for 2.5 < d < 7.5 cm or a 0-5 cm integrating probe, None otherwise."""
+    """'skin' for 0 <= d < 2 cm, 'topsoil' for 2.5 < d < 7.5 cm, None otherwise (other or unknown depth).
+    Probes that integrate a layer (depth_to > depth_from) are classed only by LAYER_CLASSES (0-5 cm -> topsoil)."""
     if depth_from_cm is not None and depth_to_cm is not None and np.isfinite(depth_from_cm) and np.isfinite(depth_to_cm):
-        if (float(depth_from_cm), float(depth_to_cm)) in LAYER_CLASSES:
-            return LAYER_CLASSES[(float(depth_from_cm), float(depth_to_cm))]
+        layer = (float(depth_from_cm), float(depth_to_cm))
+        if layer in LAYER_CLASSES:
+            return LAYER_CLASSES[layer]
+        if layer[1] > layer[0]:
+            return None
     if depth_cm is None or not np.isfinite(depth_cm):
         return None
     for name, (lower, upper, lower_in, upper_in) in DEPTH_CLASSES.items():
@@ -358,7 +362,7 @@ class SensorFit:
     network: str = ""
     probe: str = "unknown"
     depth_class: str = ""
-    ground: str = "unknown"                            # land cover | soil texture class
+    ground: str = "unknown"                            # RESOLVE biome | soil texture class
 
 
 def sensor_rng(sensor_id: str, s: Settings) -> np.random.Generator:
@@ -481,14 +485,14 @@ def fallback_levels(fits: list[SensorFit]) -> dict:
 
 def fallbacks_for(fit: SensorFit, levels: dict) -> list:
     """Ordered (label, average, same_probe) options after the sensor's own winters: same network and probe ->
-    same probe anywhere -> same network, other probes -> same land cover and soil texture -> global
+    same probe anywhere -> same network, other probes -> same biome and soil texture -> global
     (the last three add the cross-probe sd)."""
     dc = fit.depth_class
     chain = [("network_probe_average", levels.get(("network_probe", fit.network, fit.probe, dc)), True)]
     if fit.probe != "unknown":
         chain.append(("probe_average", levels.get(("probe", fit.probe, dc)), True))
     chain.append(("network_average", levels.get(("network", fit.network, dc)), False))
-    chain.append(("land_cover_soil_average", levels.get(("ground", fit.ground, dc)), False))
+    chain.append(("biome_soil_average", levels.get(("ground", fit.ground, dc)), False))
     chain.append(("global_average", levels.get(("global", dc)), False))
     return [c for c in chain if c[1]]
 
@@ -501,7 +505,7 @@ def _reference(w: WinterFit) -> bool:
 def apply_slow_freeze_rule(fits: list[SensorFit], s: Settings = Settings()) -> float:
     """Winters whose fitted width exceeds the 90th percentile of reference widths (fitted winters with a seen frozen
     level) keep T_on; T_fr = T_on - donor width, with donors (reference, not slow) taken from: same sensor -> same
-    network and probe -> same probe -> same land cover and soil texture -> all.
+    network and probe -> same probe -> same biome and soil texture -> all.
     Call before pool_sensors. Returns the width cut-off used."""
     trusted = [(f, w) for f in fits for w in f.winters.values() if _reference(w)]
     widths = np.array([w.t_on - w.t_fr for _, w in trusted])
@@ -516,7 +520,7 @@ def apply_slow_freeze_rule(fits: list[SensorFit], s: Settings = Settings()) -> f
             groups = (("sensor", [d for f, d in same if f is fit and d is not w]),
                       ("network_probe", [d for f, d in same if (f.network, f.probe) == (fit.network, fit.probe)]),
                       ("probe", [d for f, d in same if f.probe == fit.probe and fit.probe != "unknown"]),
-                      ("land_cover_soil", [d for f, d in same if f.ground == fit.ground and "unknown" not in fit.ground]),
+                      ("biome_soil", [d for f, d in same if f.ground == fit.ground and "unknown" not in fit.ground]),
                       ("all", [d for _, d in same]))
             level, chosen = next(((lab, g) for lab, g in groups if len(g) >= s.min_donors), (None, []))
             if level is None:
@@ -570,13 +574,20 @@ def threshold_draws(fit: SensorFit, fyear: int, fallbacks, s: Settings,
             return w.t_on_pooled + (p[:, 0] - m_on) * k_on, w.t_fr_pooled + (p[:, 1] - m_fr) * k_fr
 
         return (*_keep_ordered(*redraw(n), redraw), "own_winter")
-    options = ([("sensor_average", fit.average, True)] if fit.average else []) + list(fallbacks)
-    if not options:
+    fallbacks = list(fallbacks)
+    if not fit.average and not fallbacks:
         raise ValueError(f"{fit.sensor_id} {fyear}: no thresholds available at any fallback level")
-    label, src, same_probe = options[0]
-    cross = 0.0 if same_probe else s.cross_probe_sd_c
-    sd_on = np.sqrt(max(src["t_on"][1], s.se_floor_c) ** 2 + s.extra_sd_on_c**2 + cross**2)
-    sd_fr = np.sqrt(max(src["t_fr"][1], s.se_floor_c) ** 2 + extra_fr**2 + cross**2)
+
+    def sds(option):
+        _, src, same_probe = option
+        cross = 0.0 if same_probe else s.cross_probe_sd_c
+        return (np.sqrt(max(src["t_on"][1], s.se_floor_c) ** 2 + s.extra_sd_on_c**2 + cross**2),
+                np.sqrt(max(src["t_fr"][1], s.se_floor_c) ** 2 + extra_fr**2 + cross**2))
+
+    # the sensor's own average competes with the first group level; the tighter one (T_on and T_fr variance) wins
+    options = [o for o in ([("sensor_average", fit.average, True)] if fit.average else []) + fallbacks[:1]]
+    label, src, _ = min(options, key=lambda o: sum(v**2 for v in sds(o)))
+    sd_on, sd_fr = sds((label, src, _))
 
     def redraw(k):
         return rng.normal(src["t_on"][0], sd_on, k), rng.normal(src["t_fr"][0], sd_fr, k)
@@ -721,7 +732,7 @@ class SFCCProcessor:
 
 
 # --- batch run -------------------------------------------------------------------------------
-THRESHOLD_COLUMNS = ("sensor_id", "network", "probe", "depth_class", "land_cover_soil", "fyear", "status", "coldest_c", "eps_unfrozen",
+THRESHOLD_COLUMNS = ("sensor_id", "network", "probe", "depth_class", "biome_soil", "fyear", "status", "coldest_c", "eps_unfrozen",
                      "eps_frozen", "cold_misfit", "n_boot_ok", "frozen_level_seen", "slow_freeze", "t_fr_source", "t_on_c", "t_on_sd_c",
                      "t_fr_c", "t_fr_sd_c", "model_version")
 EXTRA_PREDICTION_COLUMNS = ("leg", "frozen_fraction", "threshold_source")
@@ -795,7 +806,7 @@ def run_classification(catalog: pd.DataFrame, observations_root: Path, output_di
                        run_info: dict | None = None) -> dict:
     """Fit, apply the slow-freeze rule, pool, and write predictions/<id>.csv.gz, thresholds.csv, yearly_events.csv
     and manifest.json. catalog needs sensor_id, source, network, raw_variable, depth_cm and optionally probe,
-    land_cover (ESA CCI class group) and soil_texture (SoilGrids USDA texture class) columns."""
+    biome (RESOLVE Ecoregions 2017 biome) and soil_texture (SoilGrids USDA texture class) columns."""
     from concurrent.futures import ProcessPoolExecutor
     import json
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -805,7 +816,7 @@ def run_classification(catalog: pd.DataFrame, observations_root: Path, output_di
         catalog["probe"] = catalog_probes(catalog)
     rows = catalog.to_dict("records")
     def ground(r):
-        lc, tex = r.get("land_cover"), r.get("soil_texture")
+        lc, tex = r.get("biome"), r.get("soil_texture")
         return f"{lc if isinstance(lc, str) else 'unknown'}|{tex if isinstance(tex, str) else 'unknown'}"
 
     meta = {r["sensor_id"]: (r["network"] if isinstance(r.get("network"), str) else r["source"], r["probe"],
@@ -826,7 +837,7 @@ def run_classification(catalog: pd.DataFrame, observations_root: Path, output_di
         for w in fit.winters.values():
             ok = w.fitted
             table.append(dict(sensor_id=sid, network=fit.network, probe=fit.probe, depth_class=fit.depth_class,
-                              land_cover_soil=fit.ground,
+                              biome_soil=fit.ground,
                               fyear=w.fyear, status=w.status,
                               coldest_c=w.coldest_c, eps_unfrozen=w.eps_unfrozen, eps_frozen=w.eps_frozen,
                               cold_misfit=w.cold_misfit, n_boot_ok=w.n_boot_ok,

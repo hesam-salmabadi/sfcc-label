@@ -1,6 +1,8 @@
 % Draft for Earth System Science Data using Copernicus LaTeX package 7.16.
 % Numbers reflect docs/data_processing_record.md as of 2026-09-27.
 \documentclass[essd,manuscript]{copernicus}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit}
 
 \begin{document}
 
@@ -93,6 +95,20 @@ locate every sensor on Northern Hemisphere and global grids at 6.25--36\,km
 area-weighted class fractions for each cell, and a representativeness flag for
 each sensor--grid pair. That flag requires the sensor class to dominate at
 least 70\,\% of the cell, with no more than 5\,\% water or 5\,\% other cover.
+The sensor's detailed ESA CCI class (e.g. needleleaved evergreen tree cover,
+lichens and mosses) is kept alongside the six merged classes. Because land
+cover describes vegetation structure but not climate, it cannot separate
+boreal from temperate forest or tundra from prairie grassland; each sensor is
+therefore also assigned the biome and ecoregion of RESOLVE Ecoregions 2017
+\citep{dinerstein2017}. Seventeen sensors on coasts or lake shores lie just
+outside every ecoregion polygon and take the nearest one (at most 2.8\,km
+away). Most sensors lie in temperate biomes; 925 are in boreal forest and 847 in
+tundra (Table~\ref{tab:biome-soil}). Biomes describe potential natural
+vegetation, so cropland is the most common cover in the temperate broadleaf
+and grassland biomes. Boreal and tundra sites have the most organic-rich and
+least dense soils (median SOC 72 and 99\,g\,kg$^{-1}$).
+
+\input{tables/biome_soil.tex}
 
 \begin{figure}[t]
 \centering
@@ -100,7 +116,7 @@ least 70\,\% of the cell, with no more than 5\,\% water or 5\,\% other cover.
 \node[draw, rounded corners, align=center, minimum width=3.1cm, minimum height=1.1cm] (src) at (0,0) {14 source collections};
 \node[draw, rounded corners, align=center, minimum width=3.1cm, minimum height=1.1cm] (hour) at (4.4,0) {Hourly UTC files\\one per sensor};
 \node[draw, rounded corners, align=center, minimum width=3.1cm, minimum height=1.1cm] (cat) at (8.8,0) {Sensor catalog\\\texttt{sensor\_id}};
-\node[draw, rounded corners, align=center, minimum width=4.3cm, minimum height=1.2cm] (anc) at (8.8,-2.1) {SoilGrids soil\quad EASE-Grid cells\\CCI land cover and screening};
+\node[draw, rounded corners, align=center, minimum width=4.3cm, minimum height=1.2cm] (anc) at (8.8,-2.1) {SoilGrids soil\quad EASE-Grid cells\\CCI land cover, screening, biome};
 \draw[->] (src) -- (hour);
 \draw[->] (hour) -- (cat);
 \draw[->] (cat) -- (anc);
@@ -111,6 +127,21 @@ least 70\,\% of the cell, with no more than 5\,\% water or 5\,\% other cover.
 
 \section{Soil freeze--thaw state}
 \label{sec:state}
+Hourly probabilities of thawed, transitional and frozen soil and yearly freeze
+dates are derived for topsoil sensors in three steps (Fig.~\ref{fig:workflow}):
+freezing thresholds are fitted where soil moisture or permittivity is measured
+(Sect.~\ref{sec:state-permittivity}), borrowed where only soil temperature is
+available or no fit was accepted (Sect.~\ref{sec:state-temperature}), and
+applied hour by hour with their uncertainty (Sect.~\ref{sec:state-hourly}).
+
+\begin{figure*}[t]
+\centering
+\resizebox{\textwidth}{!}{\input{figures/workflow.tex}}
+\caption{Workflow of the freeze--thaw state. Grey: inputs; orange: acceptance
+test of each winter's fit; blue: outputs for every hour and year.}
+\label{fig:workflow}
+\end{figure*}
+
 
 \subsection{Sensors with soil moisture or permittivity}
 \label{sec:state-permittivity}
@@ -119,7 +150,8 @@ temperature, or volumetric water content converted to (pseudo-)permittivity by
 inverting \citet{topp1980}, the freezing of soil water is described by a soil
 freezing characteristic curve in permittivity--temperature space
 \citep{salmabadi2026}. The method is applied to the topsoil class
-($2.5 < z < 7.5$\,cm, plus probes integrating 0--5\,cm). Each freeze year (1~August--31~July) is split at the day
+($2.5 < z < 7.5$\,cm, plus probes integrating exactly 0--5\,cm; probes
+integrating deeper layers such as 0--10\,cm are excluded). Each freeze year (1~August--31~July) is split at the day
 of lowest daily-mean soil temperature into a freezing and a thawing leg. The
 curve is fitted to the freezing leg only, so that snowmelt infiltration and
 thaw hysteresis do not enter the fit. Readings of the freezing leg are grouped
@@ -223,9 +255,25 @@ terms described below (Fig.~\ref{fig:example-winters}).
 A regression of $\varepsilon_r$ on SoilGrids
 texture, organic carbon, bulk density and probe type reduced the
 leave-one-site-out error only from 1.16 to 1.01 permittivity units and was not
-adopted. Fits are rejected when the soil showed less than 15\,\% of the
-expected permittivity drop, when a parameter reached its bound, or when the
-misfit of the bins colder than $T_{on}$ exceeded 30\,\% of the drop.
+adopted. A winter's fit is accepted only if it passes five checks. (i) Enough data:
+the $+0.8$ to $+2.5$\,$^{\circ}$C window contains bins, and at least five bins
+lie between $-4$ and $+2.5$\,$^{\circ}$C. (ii) The soil froze noticeably: the
+lowest permittivity reached (median of three neighbouring cold bins) covers at
+least 15\,\% of the way, on the $\sqrt{\varepsilon}$ scale, from $\varepsilon_u$
+to the expected frozen level $0.44\,\varepsilon_u$; otherwise there is no curve
+to fit. (iii) No parameter rests on its limit ($T_{on}$ between $-2$ and
+$+1.5$\,$^{\circ}$C, width below 7.5\,$^{\circ}$C, $\varepsilon_r/\varepsilon_u$
+above 0.03), because a solution held by a limit is set by the limit rather
+than by the data. (iv) The curve matches the cold data: the root-mean-square
+difference between curve and bins colder than $T_{on}+0.3$\,$^{\circ}$C is at
+most 30\,\% of the total fall $\sqrt{\varepsilon_u}-\sqrt{\varepsilon_r}$. (v)
+The result is stable: at least half of the bootstrap replicates described
+below give an accepted fit (checks i--iii). In the topsoil class, 4,846 of
+11,884 sensor-winters with moisture data passed; 3,812 failed check (i), 2,472
+check (ii), 352 check (iii), 226 check (iv) and 176 check (v). Most failures
+are winters that never cooled near 0\,$^{\circ}$C or barely froze, and these
+borrow thresholds like temperature-only sensors
+(Sect.~\ref{sec:state-temperature}).
 
 \paragraph{Slow freezes.} In some winters the fitted curve is very wide: the
 permittivity falls slowly over several degrees, and $T_{fr}$ lies far below
@@ -238,7 +286,7 @@ wider than that (339 of 4,846 fitted topsoil winters, 7.0\,\%) keep their
 $T_{on}$, but $T_{fr}$ is replaced by $T_{on}$ minus the median width of
 reference winters that are not wide themselves, taken from the first of these
 groups with at least three such winters: the same sensor, the same network and
-probe type, the same probe type, the same land cover and soil texture, or all
+probe type, the same probe type, the same biome and soil texture, or all
 topsoil winters. The spread of the borrowed widths is added to the uncertainty
 of $T_{fr}$. Wide curves are more common in dry soils (16\,\% of winters with
 $\varepsilon_u \le 6$ against 2\,\% with $\varepsilon_u > 20$;
@@ -250,13 +298,7 @@ the fit. $T_{on}$ and $T_{fr}$ are the replicate medians and their spread the
 fitting uncertainty; to reach nominal 95\,\% coverage on a synthetic benchmark
 with known thresholds, 0.1\,$^{\circ}$C is added to $T_{on}$ and 0.2, 0.5 or
 1.0\,$^{\circ}$C to $T_{fr}$ when the soil went at least 1\,$^{\circ}$C below,
-less than 1\,$^{\circ}$C below, or never below $T_{fr}$. Hourly state
-probabilities are obtained by Monte Carlo: 400 $(T_{on},T_{fr})$ pairs are drawn
-from the bootstrap distribution and compared with the measured temperature
-perturbed by 0.1\,$^{\circ}$C thermometer noise; the probability of each state
-is the fraction of draws in which it occurs. The thermistor offset of each
-probe is already contained in its fitted thresholds, so only the random
-thermometer error is added.
+less than 1\,$^{\circ}$C below, or never below $T_{fr}$.
 
 \begin{figure*}[t]
 \centering
@@ -314,6 +356,105 @@ per winter; the solid line is $0.44\,\varepsilon_u$ and the dotted lines the
 \label{fig:frozen-fraction}
 \end{figure}
 
+\subsection{Sensors with soil temperature only}
+\label{sec:state-temperature}
+% Counts are estimates from the per-winter fits (scripts/winter_widths.py); update after the full run.
+Without a moisture or permittivity record no curve can be fitted, so the
+thresholds of these sensors are borrowed from fitted sensors. The same
+applies to moisture sensors in years without an accepted fit (for example a
+mild winter with less than 15\,\% of the expected drop). Of the 3,942 topsoil
+sensors, about 1,430 have at least one fitted winter, about 790 have moisture
+data but no fitted winter, and about 1,710 measure temperature only or have no
+usable paired record.
+
+Fitted winters are first pooled per sensor. Each winter's $T_{on}$ and
+$T_{fr}$ are shrunk towards the sensor mean with a DerSimonian--Laird
+random-effects model \citep{dersimonian1986}; the winter keeps its own
+uncertainty, because errors in the frozen level are shared by all winters of
+a sensor. Sensor means are combined into group means in the same way, and the
+between-sensor spread is part of the uncertainty of each group mean. A
+sensor-year without its own fit then uses the first available of
+(1) the same sensor's other fitted winters, (2) sensors of the same network
+with the same temperature-probe type, (3) sensors with the same probe type in
+any network, (4) sensors of the same network with another probe type, (5)
+sensors with the same RESOLVE biome and SoilGrids USDA texture class
+(at least three sensors), and (6) all topsoil sensors. Groups never mix depth
+classes. Level (1) competes with the first available of levels (2)--(6): the
+one with the smaller combined uncertainty of $T_{on}$ and $T_{fr}$ is used,
+because a sensor with only one or two fitted winters that disagree gives a
+poorer estimate than its group.
+
+The order follows two findings. First, fitted thresholds contain the
+thermistor offset of each probe, so the probe type matters: at eight James Bay
+sites where a TEROS12 and an iButton were co-located, the difference of their
+zero-curtain temperatures was $+0.02 \pm 0.16$\,$^{\circ}$C. No offset
+correction is applied, but levels (4)--(6), which may mix probe types, add
+0.16\,$^{\circ}$C to the uncertainty of both thresholds. Second, the groupings
+were ranked by how well they predict thresholds at a site whose own thresholds
+are known but withheld (Fig.~\ref{fig:grouping}). The test uses the 4,507
+fitted topsoil winters at 978 sites (slow freezes excluded). Each site in turn
+is treated as if it had no moisture record: it is removed, every grouping
+predicts its $T_{on}$ and $T_{fr}$ as the median of the other sites' winters in
+the same group (at least three, otherwise the median of all), and the
+prediction is compared with the site's own fitted values. Removing whole sites
+rather than single winters prevents a sensor from being predicted by its
+neighbours at the same site. For James Bay BJ04, for example, all other sites
+give $T_{on} = +0.34$\,$^{\circ}$C, forest on sandy loam $+0.40$, boreal forest
+on sandy loam $+0.58$ and the other James Bay TEROS12 sensors $+0.66$, against
+a fitted $+0.87$\,$^{\circ}$C (Fig.~\ref{fig:grouping}a). Over all winters,
+network and probe type gave the smallest median absolute error ($T_{on}$
+0.24\,$^{\circ}$C, $T_{fr}$ 0.42\,$^{\circ}$C, against 0.32 and
+0.51\,$^{\circ}$C without grouping). Among groupings by environment, biome and
+texture class together did best (0.26 and 0.43\,$^{\circ}$C), ahead of land
+cover and texture (0.27, 0.44) and of land cover alone (0.31, 0.49); adding
+land cover to biome and texture did not improve it further and left more
+sites without a group (Fig.~\ref{fig:grouping}b, c). Borrowed thresholds also receive
+the extra 0.1\,$^{\circ}$C on $T_{on}$ and 0.5\,$^{\circ}$C on $T_{fr}$, and a
+minimum standard deviation of 0.1\,$^{\circ}$C. From the current fits, about
+89\,\% of the temperature-only topsoil sensors take their thresholds from a
+network and probe match, 2\,\% from the probe type, 4\,\% from their network
+with another probe type, 5\,\% from biome and texture, and fewer than
+0.5\,\% from all sensors. Each hour reports the level used
+(\texttt{threshold\_source}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_grouping.png}
+\caption{Choosing where sensors without a fit borrow their thresholds. Each
+site with fitted winters is withheld in turn and its thresholds are predicted
+from the other sites. (a) James Bay BJ04: grey dots are the fitted $T_{on}$ of
+the other sites' winters in each candidate group, the black bar their median
+(the prediction), the dashed line BJ04's own fitted $T_{on}$. (b, c) Absolute
+prediction error of $T_{on}$ and $T_{fr}$ for each grouping over 4,507 topsoil
+winters at 978 sites: dot, median; line, 25th--75th percentile. Blue: the
+environment grouping used (level 5); black: network and probe type (level 2).}
+\label{fig:grouping}
+\end{figure}
+
+\subsection{Hourly state probabilities and freeze dates}
+\label{sec:state-hourly}
+For every hour, 400 pairs $(T_{on},T_{fr})$ are drawn, from the winter's
+bootstrap distribution rescaled to its final uncertainty or, for borrowed
+thresholds, from normal distributions around the borrowed means. Each pair is
+compared with the measured temperature perturbed by 0.1\,$^{\circ}$C
+thermometer noise, and the probability of thawed, transitional and frozen soil
+is the fraction of draws in each state; the mean of $F$ over the draws gives
+the expected frozen fraction. Pairs with $T_{fr} \ge T_{on}$ are redrawn. The
+thermistor offset of each probe is already contained in its thresholds, so
+only the random thermometer error is added. Each hour is also assigned to the
+freezing or thawing leg so that spring, when meltwater and thaw hysteresis
+occur but the same thresholds are applied, can be analysed separately.
+
+Each day with at least 75\,\% of the possible readings takes the most
+frequent hourly label. Following \citet{rautiainen2025}, the freeze start is
+the first day on or before 1~March that begins at least five consecutive
+frozen days, and the transition onset the first day that begins five
+consecutive days that are not thawed. The freeze end is the first day of the
+thawing leg that begins five consecutive thawed days, reported for years with
+a transition onset; \citet{rautiainen2025} define no spring date because wet
+snow masks the soil at L-band, so this rule mirrors the autumn one. Because
+thresholds use the whole freezing leg, the product is retrospective.
+
 \section{Data quality, validation, and limitations}
 An independent implementation recomputed grid cells, land-cover assignments,
 representativeness flags, and SoilGrids values from source definitions and
@@ -357,6 +498,16 @@ Cohen, J., Rautiainen, K., Lemmetyinen, J., Smolander, T., Vehvil\"ainen, J.,
 and Pulliainen, J.: Sentinel-1 based soil freeze/thaw estimation in boreal
 forest environments, Remote Sens. Environ., 254, 112267, 2021.
 
+\bibitem[DerSimonian and Laird(1986)]{dersimonian1986}
+DerSimonian, R. and Laird, N.: Meta-analysis in clinical trials, Control.
+Clin. Trials, 7, 177--188, 1986.
+
+\bibitem[Rautiainen et al.(2025)]{rautiainen2025}
+Rautiainen, K., Holmberg, M., Cohen, J., Mialon, A., Schwank, M.,
+Lemmetyinen, J., de la Fuente, A., and Kerr, Y.: An operational SMOS soil
+freeze--thaw product, Earth Syst. Sci. Data, 17, 5337--5353,
+https://doi.org/10.5194/essd-17-5337-2025, 2025.
+
 \bibitem[Salmabadi et al.(2026)]{salmabadi2026}
 Salmabadi, H., Pardo Lara, R., Berg, A., Mavrovic, A., Hanes, C., Montpetit, B.,
 and Roy, A.: In situ monitoring of seasonally frozen ground using soil freezing
@@ -372,6 +523,12 @@ Res., 16, 574--582, 1980.
 Brodzik, M. J., Billingsley, B., Haran, T., Raup, B., and Savoie, M. H.:
 EASE-Grid 2.0: Incremental but significant improvements for Earth-gridded data
 sets, ISPRS Int. J. Geo-Inf., 1, 32--45, 2012.
+
+\bibitem[Dinerstein et al.(2017)]{dinerstein2017}
+Dinerstein, E., Olson, D., Joshi, A., Vynne, C., Burgess, N. D., Wikramanayake,
+E., Hahn, N., Palminteri, S., Hedao, P., Noss, R., et al.: An ecoregion-based
+approach to protecting half the terrestrial realm, BioScience, 67, 534--545,
+https://doi.org/10.1093/biosci/bix014, 2017.
 
 \bibitem[Poggio et al.(2021)]{poggio2021}
 Poggio, L., de Sousa, L. M., Batjes, N. H., Heuvelink, G. B. M., Kempen, B.,

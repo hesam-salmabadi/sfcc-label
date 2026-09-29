@@ -20,6 +20,6 @@ Model `sfcc-joint-1.1` is developed and evaluated for the **topsoil class (2.5 c
 - **Soil-based frozen-level prior (`SoilPrior`):** kept but not used; revisit after the full run.
 
 ## Before the full topsoil run
-- Decision log (every method choice with its evidence) — pending.
-- Workflow chart in the manuscript — pending.
+- Decision log: drafted in [decision_log.md](decision_log.md); user review pending.
+- Workflow chart in the manuscript: done (`manuscript/figures/workflow.tex`).
 - Commit the code so the run manifest records a clean commit.

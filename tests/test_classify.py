@@ -138,7 +138,7 @@ def test_fallback_chain_adds_cross_probe_uncertainty():
     pool_sensors([teros, ibutton])
     chain = fallbacks_for(ibutton, fallback_levels([teros, ibutton]))
     assert [c[0] for c in chain] == ["network_average", "global_average"] and chain[0][2] is False
-    ibutton.ground = teros.ground = "forest|sandy loam"
+    ibutton.ground = teros.ground = "Boreal Forests/Taiga|sandy loam"
     on_cross, _, source = threshold_draws(ibutton, 2020, chain, FAST, np.random.default_rng(0), n=4000)
     on_same, _, _ = threshold_draws(ibutton, 2020, [("x", chain[0][1], True)], FAST, np.random.default_rng(0), n=4000)
     assert source == "network_average" and on_cross.std() > on_same.std()
@@ -158,6 +158,7 @@ def test_depth_classes():
     assert depth_class(2.5) is None and depth_class(3.0) == "topsoil" and depth_class(5.08) == "topsoil"
     assert depth_class(7.4) == "topsoil" and depth_class(7.5) is None and depth_class(float("nan")) is None
     assert depth_class(2.5, 0.0, 5.0) == "topsoil" and depth_class(2.5, 2.5, 2.5) is None
+    assert depth_class(5.0, 0.0, 10.0) is None and depth_class(4.0, 0.0, 8.0) is None and depth_class(5.0, 5.0, 5.0) == "topsoil"
 
 
 def test_fallbacks_never_mix_depth_classes():
@@ -180,21 +181,32 @@ def test_gzipped_prediction_files_are_readable(tmp_path):
     assert read_predictions(path, "x")[0].label == "thawed"
 
 
-def test_temperature_only_network_borrows_matching_land_cover_and_soil():
+def test_temperature_only_network_borrows_matching_biome_and_soil():
     from sfcc_label.classify import fallback_levels, fallbacks_for
     donors = [fit_sensor(f"d{i}", synthetic(seed=20 + i), FAST) for i in range(3)]
     other = fit_sensor("other_ground", synthetic(t_on=-0.5, seed=30), FAST)
     lonely = fit_sensor("lonely", synthetic(tmin=1.5, seed=1), FAST)
     for f in donors:
-        f.network, f.probe, f.ground = "a", "meter", "forest|sandy loam"
-    other.network, other.probe, other.ground = "b", "meter", "agriculture|clay loam"
-    lonely.network, lonely.probe, lonely.ground = "ibutton_net", "ibutton", "forest|sandy loam"
+        f.network, f.probe, f.ground = "a", "meter", "Boreal Forests/Taiga|sandy loam"
+    other.network, other.probe, other.ground = "b", "meter", "Temperate Grasslands, Savannas & Shrublands|clay loam"
+    lonely.network, lonely.probe, lonely.ground = "ibutton_net", "ibutton", "Boreal Forests/Taiga|sandy loam"
     pool_sensors(donors + [other, lonely])
     chain = fallbacks_for(lonely, fallback_levels(donors + [other, lonely]))
-    assert chain[0][0] == "land_cover_soil_average" and chain[0][2] is False
+    assert chain[0][0] == "biome_soil_average" and chain[0][2] is False
 
 
 def test_frozen_level_seen_needs_cold_flat_run():
     cold = fit_sensor("cold", synthetic(tmin=-8), FAST).winters[2020]
     mild = fit_sensor("mild", synthetic(tmin=-3), FAST).winters[2020]
     assert cold.frozen_level_seen and not mild.frozen_level_seen
+
+
+def test_tighter_of_sensor_average_and_group_is_used():
+    fit = fit_sensor("s", synthetic(), FAST)
+    fit.average = {"t_on": (0.3, 1.0), "t_fr": (-2.0, 1.5)}
+    tight = {"t_on": (0.0, 0.1), "t_fr": (-1.0, 0.2)}
+    wide = {"t_on": (0.0, 2.0), "t_fr": (-1.0, 2.0)}
+    _, _, source = threshold_draws(fit, 1999, [("network_probe_average", tight, True)], FAST, np.random.default_rng(0))
+    assert source == "network_probe_average"
+    _, _, source = threshold_draws(fit, 1999, [("network_probe_average", wide, True)], FAST, np.random.default_rng(0))
+    assert source == "sensor_average"

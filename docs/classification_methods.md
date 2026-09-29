@@ -65,7 +65,7 @@ of the median of the three coldest bins, over at least 0.5 °C), the drop exceed
 frozen level is at least 2 (instrument minimum ≈ 2.3; Pardo Lara et al., 2020). The same rule selected the
 winters behind the priors. For slow winters, T_on was retained and T_fr was set to T_on minus the median width
 of non-slow reference winters, taken from the first level with at least three of them: the same sensor, the
-same network and temperature-probe type, the same probe type, the same land cover and soil texture, or all
+same network and temperature-probe type, the same probe type, the same biome and soil texture, or all
 winters; the donors' standard deviation was propagated into T_fr. No soil is exempt. In the topsoil class the
 reference widths had a median of 1.51 °C and a 90th percentile of 3.07 °C, and 339 of 4,846 fitted winters
 (7.0 %) were slow; wide curves were more frequent in dry soils (16 % of winters with ε_u ≤ 6 vs 2 % with
@@ -77,16 +77,19 @@ Parameter uncertainty was estimated with a day-block bootstrap (200 replicates):
 with replacement, binning and fitting were repeated, and the prior centres were re-drawn from their own
 distributions in every replicate so that prior uncertainty propagates where the data are uninformative. A
 winter was accepted when at least half of the replicates converged; thresholds are the replicate medians and
-their uncertainty the replicate standard deviations. Winters without an accepted fit borrowed thresholds from, in order, the same sensor's other winters, sensors
+their uncertainty the replicate standard deviations. Winters without an accepted fit borrowed thresholds from, in order, the same sensor's other winters (unless the
+first available group level below had a smaller combined uncertainty), sensors
 of the same network and temperature-probe family, the same probe family in any network, the same network
-with other probes, sensors sharing the ESA CCI land-cover group and SoilGrids USDA texture class (at least three
+with other probes, sensors sharing the RESOLVE Ecoregions 2017 biome (Dinerstein et al., 2017) and SoilGrids USDA texture class (at least three
 sensors), and all sensors of the same depth class. Because fitted thresholds include each probe's thermistor offset, the last
 two levels add 0.16 °C, the standard deviation of TEROS12 − iButton differences on zero-curtain plateaus at
 eight co-located James Bay sites (mean +0.02 °C, hence no offset correction). In a leave-one-site-out test on
-1,251 winters, network × probe type gave the lowest prediction error for T_on, T_fr and width (e.g. T_on
-0.22 °C vs 0.34 °C for a global median), whereas ESA CCI land cover or SoilGrids clay class alone added little; for topsoil sensors, land cover × USDA
-texture class was the best land-cover/soil grouping (T_on 0.22 °C vs 0.29 °C without grouping). Only sensors
-with 2.5 cm < depth < 7.5 cm, plus probes integrating 0–5 cm (topsoil class), were processed.
+4,507 fitted topsoil winters at 978 sites, network × probe type gave the lowest prediction error (median
+absolute error T_on 0.24 °C, T_fr 0.42 °C vs 0.32 and 0.51 °C for a global median); among environment groupings,
+biome × USDA texture class was best (0.26, 0.43 °C), ahead of ESA CCI land cover × texture (0.27, 0.44) and land
+cover alone (0.31, 0.49). Only sensors
+with 2.5 cm < depth < 7.5 cm, plus probes integrating exactly 0–5 cm (topsoil class), were processed; probes
+integrating other layers (e.g. 0–10 cm) were excluded.
 
 Winter estimates were shrunk toward the sensor mean with
 a DerSimonian–Laird random-effects model (DerSimonian and Laird, 1986) while retaining each winter's own
@@ -145,6 +148,7 @@ strongly on the priors.
 ## References
 
 - Bai, R., Lai, Y., Zhang, M., Yu, F. (2018). Theory and application of a novel soil freezing characteristic curve. *Applied Thermal Engineering*, 129, 1106–1114.
+- Dinerstein, E., et al. (2017). An ecoregion-based approach to protecting half the terrestrial realm. *BioScience*, 67, 534–545.
 - Cohen, J., Rautiainen, K., Lemmetyinen, J., Smolander, T., Vehviläinen, J., Pulliainen, J. (2021). Sentinel-1 based soil freeze/thaw estimation in boreal forest environments. *Remote Sensing of Environment*, 254, 112267.
 - DerSimonian, R., Laird, N. (1986). Meta-analysis in clinical trials. *Controlled Clinical Trials*, 7, 177–188.
 - Pardo Lara, R., Berg, A. A., Warland, J., Tetlock, E. (2020). In situ estimates of freezing/melting point depression in agricultural soils using permittivity and temperature measurements. *Water Resources Research*, 56, e2019WR026020.

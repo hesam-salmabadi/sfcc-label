@@ -34,6 +34,20 @@ _GROUPS = {
     5: (210,),
     6: (190, 200, 201, 202, 220),
 }
+# ESA CCI LC v2.0.7 LCCS legend (stored per sensor as cci_class)
+CCI_NAMES = {
+    10: "cropland, rainfed", 11: "cropland, herbaceous", 12: "cropland, tree or shrub", 20: "cropland, irrigated",
+    30: "mosaic cropland (>50 %)", 40: "mosaic natural vegetation (>50 %)", 50: "tree, broadleaved evergreen",
+    60: "tree, broadleaved deciduous", 61: "tree, broadleaved deciduous, closed", 62: "tree, broadleaved deciduous, open",
+    70: "tree, needleleaved evergreen", 71: "tree, needleleaved evergreen, closed", 72: "tree, needleleaved evergreen, open",
+    80: "tree, needleleaved deciduous", 81: "tree, needleleaved deciduous, closed",
+    82: "tree, needleleaved deciduous, open", 90: "tree, mixed leaf type", 100: "mosaic tree and shrub (>50 %)",
+    110: "mosaic herbaceous (>50 %)", 120: "shrubland", 121: "shrubland, evergreen", 122: "shrubland, deciduous",
+    130: "grassland", 140: "lichens and mosses", 150: "sparse vegetation", 151: "sparse tree", 152: "sparse shrub",
+    153: "sparse herbaceous", 160: "tree, flooded, fresh or brackish water", 170: "tree, flooded, saline water",
+    180: "shrub or herbaceous, flooded", 190: "urban", 200: "bare areas", 201: "bare areas, consolidated",
+    202: "bare areas, unconsolidated", 210: "water", 220: "permanent snow and ice",
+}
 LOOKUP = np.zeros(256, dtype=np.uint8)
 for _code, _values in _GROUPS.items():
     LOOKUP[list(_values)] = _code

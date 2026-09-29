@@ -44,7 +44,7 @@ Install `python -m pip install -e '.[classify]'` (numpy, scipy, pandas) for the 
 | `soil_temperature_sensor_type`, `soil_moisture_sensor_type` | Documented instrument family/model for each measurement; `NaN` when the source does not identify it |
 | `sensor_type_source`, `sensor_type_note` | Evidence and qualification for the instrument-type fields |
 
-Site land cover and soil properties are not columns of the sensor metadata: ESA CCI land cover is in `metadata/sensor_landcover_cci.csv`, SoilGrids values in `metadata/sensor_soil.csv`, and grid cells in `metadata/sensor_grid_cells.csv`, all keyed by `sensor_id`.
+Site land cover and soil properties are not columns of the sensor metadata: ESA CCI land cover is in `metadata/sensor_landcover_cci.csv`, RESOLVE biome and ecoregion in `metadata/sensor_biome.csv` (`sfcc-label biome-sensors`, needs `.[biome]`), SoilGrids values in `metadata/sensor_soil.csv`, and grid cells in `metadata/sensor_grid_cells.csv`, all keyed by `sensor_id`.
 
 The merged metadata catalog is `metadata/catalog.csv`. It has the same schema as
 each source-specific `*_sensors.csv` file, so it can be loaded by the normal

@@ -80,11 +80,11 @@ def _classify(args) -> None:
     catalog = catalog[[c == args.depth_class for c in classes]]
     pairing = args.catalog.parent / "ismn_pairing.csv"
     catalog["probe"] = catalog_probes(catalog, pd.read_csv(pairing) if pairing.exists() else None)
-    land_cover = args.catalog.parent / "sensor_landcover_cci.csv"
+    biome = args.catalog.parent / "sensor_biome.csv"
     soil = args.catalog.parent / "sensor_soil.csv"
-    if land_cover.exists():
-        lc = pd.read_csv(land_cover, usecols=["sensor_id", "sensor_class"]).drop_duplicates("sensor_id")
-        catalog = catalog.merge(lc.rename(columns={"sensor_class": "land_cover"}), on="sensor_id", how="left")
+    if biome.exists():
+        bio = pd.read_csv(biome, usecols=["sensor_id", "biome"]).drop_duplicates("sensor_id")
+        catalog = catalog.merge(bio, on="sensor_id", how="left")
     if soil.exists():
         tex = pd.read_csv(soil, usecols=["sensor_id", "texture_class_usda"]).drop_duplicates("sensor_id")
         catalog = catalog.merge(tex.rename(columns={"texture_class_usda": "soil_texture"}), on="sensor_id", how="left")
@@ -279,6 +279,12 @@ def main() -> None:
     cci_sensors.add_argument("--grid-dir", type=Path, default=DATA_ROOT / "landcover")
     cci_sensors.add_argument("--output", type=Path, default=DATA_ROOT / "metadata/sensor_landcover_cci.csv")
     cci_sensors.add_argument("--year", type=int, default=2015)
+    biome = subparsers.add_parser(
+        "biome-sensors", help="per-sensor RESOLVE Ecoregions 2017 biome and ecoregion")
+    biome.add_argument("--catalog", type=Path, default=DATA_ROOT / "metadata/catalog.csv")
+    biome.add_argument("--source", type=Path,
+                       default=DATA_ROOT / "sources/resolve_ecoregions/Ecoregions2017.shp")
+    biome.add_argument("--output", type=Path, default=DATA_ROOT / "metadata/sensor_biome.csv")
     tvc_hp_import = subparsers.add_parser(
         "import-tvc-hydraprobe", help="import TVC HydraProbe multi-depth workbooks")
     tvc_hp_import.add_argument("source_dir", type=Path)
@@ -514,6 +520,10 @@ def main() -> None:
     elif args.command == "landcover-cci-sensors":
         rows = sensor_landcover(args.catalog, args.source, args.grid_dir, args.output, args.year)
         print(f"Wrote {rows} sensor-grid rows to {args.output}")
+    elif args.command == "biome-sensors":
+        from .biome import sensor_biomes
+        rows = sensor_biomes(args.catalog, args.source, args.output)
+        print(f"Wrote {rows} sensor rows to {args.output}")
     elif args.command == "soilgrids-fetch":
         points = fetch_soilgrids(args.catalog, args.output, args.cache_dir, args.workers, args.limit,
                                  progress=lambda message: print(message, flush=True))

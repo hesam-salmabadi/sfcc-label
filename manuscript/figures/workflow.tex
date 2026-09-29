@@ -1,0 +1,48 @@
+% Workflow of the freeze--thaw state (Sect. 3). Included by main.tex.
+\begin{tikzpicture}[
+  font=\footnotesize, node distance=3.2mm and 5mm,
+  box/.style={draw, rounded corners=2pt, align=center, text width=#1, inner sep=3pt, minimum height=7mm},
+  box/.default=62mm,
+  inbox/.style={box=#1, fill=black!6},
+  out/.style={box=#1, fill=blue!8},
+  choice/.style={box=#1, fill=orange!10},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+  lab/.style={font=\scriptsize\itshape, midway, fill=white, inner sep=1pt}]
+% --- left column: sensors with moisture or permittivity
+\node[inbox=62mm] (in1) {\textbf{Soil temperature + permittivity}\\(or VWC $\to$ pseudo-permittivity, Topp 1980)};
+\node[box, below=of in1] (leg) {Freeze year 1 Aug--31 Jul\\freezing leg = 1 Aug to coldest day};
+\node[box, below=of leg] (bin) {0.1\,$^{\circ}$C bins, median $\sqrt{\varepsilon}$\\$\varepsilon_u$ = median of $+0.8$ to $+2.5$\,$^{\circ}$C};
+\node[box, below=of bin] (fit) {Joint fit of $T_{on}$ (10\,\%), $T_{fr}$ (75\,\%), $\varepsilon_r$\\priors $\varepsilon_r/\varepsilon_u = 0.44 \pm 0.14$, width 1.45\,$^{\circ}$C};
+\node[choice, below=of fit] (acc) {\textbf{Fit accepted?} enough bins $\cdot$ froze $\ge$ 15\,\%\\not stuck at a limit $\cdot$ curve fits cold data $\cdot$ stable};
+\node[box, below=of acc] (boot) {Day-block bootstrap (200)\\slow freeze: width $>$ 3.07\,$^{\circ}$C $\to$ donor width};
+\node[box, below=of boot] (pool) {Pool winters per sensor (random effects)\\+ calibrated extra error};
+% --- right column: temperature only / no fit
+\node[inbox=58mm, right=26mm of in1] (in2) {\textbf{Soil temperature only}};
+\node[box=58mm, fill=black!3, below=22mm of in2] (chain) {\textbf{Borrow thresholds}, first available:\\[1pt]
+  \raggedright
+  1 same sensor, other winters\\
+  2 same network + probe type\\
+  3 same probe type\\
+  4 same network, other probe$^{\ast}$\\
+  5 same biome + soil texture$^{\ast}$\\
+  6 all topsoil sensors$^{\ast}$\\[1pt]
+  {\scriptsize $^{\ast}$ +0.16\,$^{\circ}$C cross-probe uncertainty}};
+% --- bottom: shared
+\node[out=140mm, below=8mm of pool.south east, anchor=north, xshift=13mm] (mc) {\textbf{Hourly Monte Carlo} (400 draws of $T_{on}, T_{fr}$; $\pm$0.1\,$^{\circ}$C thermometer noise)\\
+  P(thawed), P(transition), P(frozen), frozen fraction, leg, threshold source};
+\node[out=140mm, below=of mc] (dates) {\textbf{Daily label} (majority of hours) $\to$ \textbf{yearly dates}:\\
+  transition onset, freeze start (5 days, before 1 Mar), freeze end (5 thawed days)};
+\draw[arr] (in1) -- (leg);
+\draw[arr] (leg) -- (bin);
+\draw[arr] (bin) -- (fit);
+\draw[arr] (fit) -- (acc);
+\draw[arr] (acc) -- node[lab, right]{yes} (boot);
+\draw[arr] (boot) -- (pool);
+\draw[arr] (acc.east) -- node[lab, above]{no fit} ++(8mm,0) |- ([yshift=6mm]chain.west);
+\draw[arr] (in2) -- (chain);
+\draw[arr] (pool.east) -- ++(16mm,0) coordinate (pv) |- ([yshift=-6mm]chain.west);
+\node[font=\scriptsize\itshape, align=center, right=0.5mm of pv, anchor=south west, yshift=1mm] {sensor and\\group means};
+\draw[arr] (pool.south) -- (pool.south |- mc.north);
+\draw[arr] ([xshift=12mm]chain.south) -- ([xshift=12mm]chain.south |- mc.north);
+\draw[arr] (mc) -- (dates);
+\end{tikzpicture}

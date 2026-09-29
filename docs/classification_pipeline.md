@@ -27,8 +27,9 @@ catalog row (source, network, `raw_variable`).
 | `manifest.json` | model version, depth class, git commit, all settings, counts, errors, fallback averages |
 
 ## Which sensors
-Only sensors in the **topsoil class, 2.5 cm < depth < 7.5 cm, plus probes that integrate 0–5 cm** (3,971 sensors: 3,680
-point sensors, mostly 5 cm and 5.08 cm, and 291 ISMN 0–5 cm probes),
+Only sensors in the **topsoil class, 2.5 cm < depth < 7.5 cm, plus probes that integrate 0–5 cm** (3,942 sensors: 3,651
+point sensors, mostly 5 cm and 5.08 cm, and 291 ISMN 0–5 cm probes; probes integrating other layers such as 0–10 cm
+are excluded),
 are processed; this is the class the method was developed and evaluated for. The surface skin (0–2 cm) and
 deeper sensors are on the to-do list ([classification_todo.md](classification_todo.md)). Fallback averages
 are always computed within one depth class, so classes never borrow from each other.
@@ -84,7 +85,7 @@ of the three coldest bins), with a drop of more than 3 permittivity units. When 
 (T_on − T_fr) is wider than 90 % of the reference winters (3.07 °C for topsoil), the curve is not trusted —
 whatever the soil: T_on is kept, but T_fr = T_on − a **donor width**. Donors are non-slow reference winters,
 taken from the first level with at least 3 of them: the same sensor's other winters → the same network and
-probe type → the same probe type → the same land cover and soil texture → all. The donors' spread becomes
+probe type → the same probe type → the same biome and soil texture → all. The donors' spread becomes
 T_fr's uncertainty and `t_fr_source` records the level; `frozen_level_seen` marks reference winters.
 
 BJ06: frozen level ε ≈ 5.0; **T_on = +0.60 °C, T_fr = +0.16 °C** (positive values reflect the TEROS12
@@ -110,21 +111,27 @@ it, +1.0 °C if it never reached it (extrapolated).
 | order | source | extra uncertainty |
 |---|---|---|
 | 1 | this freeze year's own fit | — |
-| 2 | the same sensor's other fitted winters (earlier or later) | — |
+| 2 | the same sensor's other fitted winters (earlier or later), **or** level 3–7 if that is tighter | — |
 | 3 | sensors in the same network with the same temperature-probe type | — |
 | 4 | sensors with the same probe type in any network | — |
 | 5 | sensors in the same network with another probe type | ± 0.16 °C |
-| 6 | sensors with the same land cover (ESA CCI) and soil texture class (SoilGrids), ≥ 3 sensors | ± 0.16 °C |
+| 6 | sensors with the same biome (RESOLVE Ecoregions 2017) and soil texture class (SoilGrids), ≥ 3 sensors | ± 0.16 °C |
 | 7 | all fitted sensors | ± 0.16 °C |
+
+The sensor's own average (level 2) competes with the first available group level: whichever has the smaller
+combined uncertainty of T_on and T_fr is used. A sensor with two very different fitted winters therefore
+borrows from its network instead (e.g. Kenaston EC14: own average T_on ± 0.97 °C vs network ± 0.17 °C).
 
 Probe types are grouped into families (all METER probes together, both HydraProbe versions together,
 iButton, PT100, …) from the catalog, the ISMN file names or the local network table. Thresholds include each
 probe's thermistor offset, which is why the order prefers the same probe type. The ± 0.16 °C is the measured
 spread between TEROS12 and iButton readings at eight co-located James Bay sites (zero-curtain plateaus: mean
-difference +0.02 °C, so no correction is applied). A leave-one-site-out test on 1,251 winters showed that
-network × probe type predicts thresholds best. For topsoil sensors, land cover × soil texture class was the
-best of the land-cover/soil groupings (typical T_on miss 0.22 °C vs 0.29 °C with no grouping), so it serves
+difference +0.02 °C, so no correction is applied). A leave-one-site-out test on 4,507 fitted topsoil winters
+at 978 sites showed that network × probe type predicts thresholds best (typical T_on miss 0.24 °C vs 0.32 °C with
+no grouping). Of the environment groupings, RESOLVE biome × soil texture class did best (T_on 0.26, T_fr 0.43 °C),
+ahead of ESA CCI land cover × texture (0.27, 0.44) and land cover alone (0.31, 0.49), so it serves
 temperature-only networks that have no fitted sensors of their own (e.g. St-Marthe, Cambridge Bay).
+(`manuscript/scripts/grouping_test.py`.)
 
 ## Step 10 — Hourly probabilities
 For every hour, 400 draws: pick a (T_on, T_fr) pair, add ± 0.1 °C thermometer noise to the measured
