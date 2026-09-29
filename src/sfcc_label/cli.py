@@ -29,6 +29,8 @@ from .ibutton_transects import import_ibutton_transect
 from .berms import import_berms
 from .tvc_boike import import_tvc_boike
 from .tvc_hydraprobe import import_tvc_hydraprobe
+from .usarray_ground import import_usarray_ground
+from .above_moisture import import_above_moisture
 from .time_qc import (benchmark_standardized_solar, load_level0_profiles,
                       read_local_sites, screen_site_years, write_time_report)
 
@@ -214,9 +216,8 @@ def main() -> None:
     dryden_import.add_argument("--context-file", required=True, type=Path)
     dryden_import.add_argument("--status-file", required=True, type=Path)
     chapleau_import = subparsers.add_parser(
-        "import-chapleau", help="import original Chapleau temperature and Chelene moisture probes")
+        "import-chapleau", help="import Chelene Chapleau temperature and moisture probes")
     chapleau_import.add_argument("chelene_dir", type=Path)
-    chapleau_import.add_argument("--temperature-workbook", required=True, type=Path)
     chapleau_import.add_argument("--aspen-latitude", required=True, type=float)
     chapleau_import.add_argument("--aspen-longitude", required=True, type=float)
     chapleau_import.add_argument("--aspen-coordinate-evidence", required=True)
@@ -224,6 +225,27 @@ def main() -> None:
     chapleau_import.add_argument("--sensors-file", required=True, type=Path)
     chapleau_import.add_argument("--context-file", required=True, type=Path)
     chapleau_import.add_argument("--status-file", required=True, type=Path)
+    for command, description in (
+        ("import-usarray-ground", "import ORNL DAAC 1680 USArray ground temperatures"),
+        ("import-ak-profiles", "import ORNL DAAC 1767 Alaska temperature profiles"),
+    ):
+        usarray_import = subparsers.add_parser(command, help=description)
+        usarray_import.add_argument("source_root", type=Path)
+        usarray_import.add_argument("--observations-dir", required=True, type=Path)
+        usarray_import.add_argument("--sensors-file", required=True, type=Path)
+        usarray_import.add_argument("--context-file", required=True, type=Path)
+        usarray_import.add_argument("--status-file", required=True, type=Path)
+        usarray_import.add_argument("--skip-ambiguous-clock-files", action="store_true")
+    above_import = subparsers.add_parser(
+        "import-above-moisture", help="import ORNL DAAC 2123 Alaska/Alberta logger probes")
+    above_import.add_argument("source_root", type=Path)
+    above_import.add_argument("--alaska-utc-offset-hours", required=True, type=int)
+    above_import.add_argument("--alberta-utc-offset-hours", required=True, type=int)
+    above_import.add_argument("--time-basis-evidence", required=True)
+    above_import.add_argument("--observations-dir", required=True, type=Path)
+    above_import.add_argument("--sensors-file", required=True, type=Path)
+    above_import.add_argument("--context-file", required=True, type=Path)
+    above_import.add_argument("--status-file", required=True, type=Path)
     st_import = subparsers.add_parser(
         "import-st-marthe-maurice", help="import original plot/pit temperatures at 2 and 10 cm")
     st_import.add_argument("source_dir", type=Path)
@@ -377,11 +399,31 @@ def main() -> None:
               f"Observations: {args.observations_dir}; metadata: {args.sensors_file}")
     elif args.command == "import-chapleau":
         rows = import_chapleau(
-            args.chelene_dir, args.temperature_workbook, args.observations_dir,
+            args.chelene_dir, args.observations_dir,
             args.sensors_file, args.context_file, args.status_file,
             args.aspen_latitude, args.aspen_longitude, args.aspen_coordinate_evidence)
         print(f"Imported {len(rows)} Chapleau streams: 12 temperatures and 48 moisture probes. "
               f"Observations: {args.observations_dir}; metadata: {args.sensors_file}")
+    elif args.command in {"import-usarray-ground", "import-ak-profiles"}:
+        release = "1680" if args.command == "import-usarray-ground" else "1767"
+        rows = import_usarray_ground(
+            args.source_root, args.observations_dir, args.sensors_file,
+            args.context_file, args.status_file, release=release,
+            skip_ambiguous_clock_files=args.skip_ambiguous_clock_files)
+        print(f"Imported {sum(row['imported_sensors'] for row in rows)} USArray {release} "
+              f"temperature streams; "
+              f"{sum(row['status'] == 'clock_ambiguous_excluded' for row in rows)} "
+              f"clock-ambiguous files excluded. Observations: {args.observations_dir}")
+    elif args.command == "import-above-moisture":
+        rows = import_above_moisture(
+            args.source_root, args.observations_dir, args.sensors_file,
+            args.context_file, args.status_file,
+            alaska_utc_offset_hours=args.alaska_utc_offset_hours,
+            alberta_utc_offset_hours=args.alberta_utc_offset_hours,
+            time_basis_evidence=args.time_basis_evidence)
+        print(f"Imported {sum(row['sensor_count'] for row in rows)} ABoVE logger streams; "
+              f"{sum(row['status'] == 'missing_probe_metadata' for row in rows)} unmapped logger IDs. "
+              f"Observations: {args.observations_dir}")
     elif args.command == "import-st-marthe-maurice":
         rows = import_st_marthe_maurice(args.source_dir, args.observations_dir,
                                         args.sensors_file, args.context_file)

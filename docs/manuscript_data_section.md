@@ -63,9 +63,10 @@ standardized records.
 ### 2.2 Harmonisation
 
 Each source was read from its original publisher files by a dedicated importer.
-All timestamps were converted to UTC using the documented source clock (for
-example the AmeriFlux site `UTC_OFFSET` for local standard time, and the
-`America/Toronto` zone for the NRCan and Chapleau loggers) and averaged to
+All timestamps were converted to UTC using the source clock definition where
+available (for example the AmeriFlux site `UTC_OFFSET` for local standard time
+and `America/Toronto` for NRCan). The Chapleau loggers use an inferred fixed
+UTC−5 clock. Measurements were averaged to
 hourly values; sub-hourly readings were averaged within each UTC hour and no
 values were interpolated. Hours without data were kept as missing values. Soil
 moisture was converted to m³ m⁻³, and source missing-value markers were set to

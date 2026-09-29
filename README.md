@@ -32,7 +32,7 @@ Install `python -m pip install -e '.[classify]'` (numpy, scipy, pandas) for the 
 | Column | Meaning |
 | --- | --- |
 | `sensor_id` | Stable, unique, file-safe identifier `<src>_<site>_<depth>_<tag>`, such as `berms_bs01_002p5cm_m` (see *Sensor naming*) |
-| `source` | `ameriflux`, `berms`, `cambridge_bay`, `chapleau`, `dryden`, `ismn`, `james_bay`, `kuujjuarapik`, `local`, `montmorency`, `nrcan_ibutton`, `st_marthe_maurice`, `tvc_boike`, or `tvc_hydraprobe` |
+| `source` | `above_moisture`, `ak_profiles`, `ameriflux`, `berms`, `cambridge_bay`, `chapleau`, `dryden`, `ismn`, `james_bay`, `kuujjuarapik`, `local`, `montmorency`, `nrcan_ibutton`, `st_marthe_maurice`, `tvc_boike`, `tvc_hydraprobe`, or `usarray_ground` |
 | `latitude`, `longitude` | WGS84 decimal degrees |
 | `site_id`, `network`, `station` | Site identity and original network/station names when known |
 | `depth_cm` | Measurement depth below surface, if known; otherwise `NaN` |
@@ -63,7 +63,7 @@ exactly four `_`-separated parts, each lowercase `a-z`, `0-9`, or `-`:
 
 | Part | Rule | Examples |
 | --- | --- | --- |
-| src | short source code | `amf` ameriflux, `berms`, `cbay` cambridge_bay, `chap` chapleau, `dryden`, `ismn`, `jbay` james_bay, `kuuj` kuujjuarapik, `local`, `mont` montmorency, `nrcan` nrcan_ibutton, `smm` st_marthe_maurice, `tvcb` tvc_boike, `tvch` tvc_hydraprobe |
+| src | short source code | `abvm` above_moisture, `akpr` ak_profiles, `amf` ameriflux, `berms`, `cbay` cambridge_bay, `chap` chapleau, `dryden`, `ismn`, `jbay` james_bay, `kuuj` kuujjuarapik, `local`, `mont` montmorency, `nrcan` nrcan_ibutton, `smm` st_marthe_maurice, `tvcb` tvc_boike, `tvch` tvc_hydraprobe, `usar` usarray_ground |
 | site | site code; ISMN uses `network-station` | `bs01`, `ca-af1`, `arm-anthony` |
 | depth | zero-padded cm; `p` for decimals; interval `top-bottom`; `nodepth` if unknown | `005cm`, `002p5cm`, `000-015cm`, `nodepth` |
 | tag | separates sensors at one site and depth; `s1` if only one | `h1v1r1`, `pi1`, `pit2`, `p1a`, `t`, `m`, `mr`, `2018`, `hummock` |
@@ -302,9 +302,9 @@ excludes Dryden on future reruns.
 
 ## Chapleau temperature and moisture importer
 
-`import-chapleau` uses the original OneDrive `data/raw/SoilTemp/Chapleau_SoilTemp.xlsx`
-for 12 temperature streams (four plots × 6, 15, and 30 cm) and the four Chelene
-plot workbooks for 48 distinct CS616 moisture probes (four per subplot at
+`import-chapleau` uses only the four Chelene plot workbooks. Their `Data` sheets
+provide 12 temperature streams (four plots × 6, 15, and 30 cm) and 48 distinct
+CS616 moisture probes (four per subplot at
 subplots 1, 3, and 5). Each physical measurement has its own file in
 `standardized/chapleau`: 12 temperature-only and 48 moisture-only streams.
 There is **no forced same-depth pairing** between temperature depths and
@@ -321,25 +321,26 @@ The `raw_value` is the uncorrected CS616 period in microseconds. The source's
 temperature-corrected period and soil-profile calibration coefficients stay
 in the original workbooks rather than being mislabeled as raw output.
 
-The source temperature workbook declares UTC. Its timestamps include
-`HH:59:59` and a few seconds after the hour; they are rounded to the nearest
-UTC hour. The Chelene workbooks use Ontario local clock time, inferred from
-matching their temperature columns to the UTC source. They are converted with
-`America/Toronto`. Five ambiguous autumn clock-change rows per plot could not
-be resolved uniquely and are not assigned an hour. One or five nonexistent
-spring local-time rows per plot are likewise skipped. Counts are recorded in
-`chapleau_context.csv` and `chapleau_import_status.csv`; no interpolation or
-new anomaly QA/QC is applied.
+The Chelene workbooks do not state a time zone. Their timestamps are
+**inferred to be fixed Ontario standard time (UTC−5 year-round)** and converted
+by adding five hours. This is an assumption, not a publisher declaration.
+All four workbooks contain 02:00 on Ontario's spring daylight-saving dates
+and just one 01:00 on autumn change dates. In summer 2018–2021, their 6 cm
+soil-temperature means peak at source hours 15–19 and bottom out at 7–9,
+consistent with a local clock rather than UTC. The uninterrupted clock-change
+hours favor fixed standard time over daylight-saving local time. The basis is
+recorded in `chapleau_context.csv` and `timezone_original`; no interpolation
+or new anomaly QA/QC is applied.
 
-The Aspen/AS3 workbooks report 47.738633, −83.40105, while the Chelene site
-document and existing CP03 metadata report about 47.71472, −83.39722.
-The import uses the latter documented site coordinates and records the
-discrepancy in context for owner review. The other plot coordinates come from
-the original temperature workbook.
+The Aspen/AS3 Chelene workbook reports 47.738633, −83.40105, while the
+Chelene site document and existing CP03 metadata report about 47.71472,
+−83.39722. The import uses the latter documented site coordinates and records
+the discrepancy in context for owner review. The other plot coordinates come
+from each Chelene workbook's first sheet. The separate `Chapleau_SoilTemp.xlsx`
+and level-0 derivatives are not inputs to this import.
 
 ```bash
 sfcc-label import-chapleau /path/to/Chelene \
-  --temperature-workbook /path/to/Chapleau_SoilTemp.xlsx \
   --aspen-latitude 47.71472 --aspen-longitude -83.39722 \
   --aspen-coordinate-evidence 'Chelene site document and existing CP03 metadata' \
   --observations-dir /path/to/private-data/standardized/chapleau \
@@ -348,14 +349,66 @@ sfcc-label import-chapleau /path/to/Chelene \
   --status-file /path/to/private-data/metadata/chapleau_import_status.csv
 ```
 
-The production import wrote 60 validated streams, including 1,758,361
-measured moisture hours across the 48 probes. The four old `local_CP01`–
-`local_CP04` files were byte-identical to their new 6 cm temperature-source
-replacements and were moved to the recoverable private archive
-`archive/local_chapleau_level0_20260926/observations`, along with a match
-manifest and copies of the pre-removal local metadata/status. Original
-workbooks and level-0 files were not modified. `import-local` excludes
-Chapleau on future reruns.
+The corrected fixed-UTC−5 import wrote 60 streams, including 1,758,664 measured
+moisture hours across the 48 probes. The prior daylight-saving conversion is
+recoverable in `archive/chapleau_toronto_dst_20260929`; its 303 omitted moisture
+hours and 80 omitted temperature hours are present in the corrected import.
+The previous standardized Chapleau set is in the
+recoverable private archive `archive/chapleau_pre_chelene_20260928`.
+The four old `local_CP01`–`local_CP04` level-0 derivatives remain in
+`archive/local_chapleau_level0_20260926`; they are not active inputs.
+Original workbooks and level-0 files were not modified. `import-local`
+excludes Chapleau on future reruns.
+
+## ABoVE USArray ground temperatures
+
+`import-usarray-ground` reads the ORNL DAAC 1680 USArray release. It keeps
+separate temperature columns as separate sensors, including repeated source
+depth labels. Unknown depth remains `NaN`; above-ground columns are excluded.
+Source times are labeled AKST and converted using fixed UTC-9, then rounded to
+the nearest UTC hour. Ordinary duplicate source clock hours are averaged per
+column and counted in the context report. A repeated hour at a daylight saving
+transition instead stops the import; `--skip-ambiguous-clock-files` excludes
+the affected whole files and records them in the status report. The 64 data
+files represent 63 sites; two
+D23K-1 logger files remain separate deployments.
+
+`import-ak-profiles` reads the ORNL DAAC 1767 release. Fifteen sites overlap
+the newer 1680 release. Both releases are kept as separate active streams,
+including the shared sites. Malformed timestamps are counted and skipped.
+The 2020 and 2022 releases can disagree at shared times; their values are
+never blended. Some 1680 files repeat 01:00 at the November 2018 daylight
+saving transition despite the guide's AKST label. Resolve those source clock
+conflicts before treating a 1680 UTC conversion as final.
+
+```bash
+sfcc-label import-usarray-ground /path/to/USArray_Ground_Temperature_1680 \
+  --observations-dir /path/to/private-data/standardized/usarray_ground \
+  --sensors-file /path/to/private-data/metadata/usarray_ground_sensors.csv \
+  --context-file /path/to/private-data/metadata/usarray_ground_context.csv \
+  --status-file /path/to/private-data/metadata/usarray_ground_import_status.csv \
+  --skip-ambiguous-clock-files
+sfcc-label import-ak-profiles /path/to/Soil_Temperature_Profiles_AK_1767 \
+  --observations-dir /path/to/private-data/standardized/ak_profiles \
+  --sensors-file /path/to/private-data/metadata/ak_profiles_sensors.csv \
+  --context-file /path/to/private-data/metadata/ak_profiles_context.csv \
+  --status-file /path/to/private-data/metadata/ak_profiles_import_status.csv
+```
+
+The 2026-09-29 import published all 88 streams from release 1767 and 252
+streams from 54 files in release 1680. Ten release 1680 files remain excluded
+for the clock conflict; see [the import audit](docs/above_import_audit.md).
+
+`import-above-moisture` reads ORNL DAAC 2123 Alaska/Alberta logger files,
+their probe depths, and source-calibrated VMC. It retains each CS625 period as
+`raw_value`, converts VMC percent to m³/m³, and writes the Campbell 109
+temperature as a separate stream with unknown depth. Repeated source hours are
+averaged; logger IDs without probe metadata are reported and excluded.
+The 2123 guide does not state the logger time zone. Its importer therefore
+requires explicit Alaska and Alberta UTC offsets and documented evidence for
+those offsets before producing standardized UTC files.
+Release 2123 is not yet active because neither regional clock basis is
+documented in the supplied source material.
 
 ## St-Marthe/St-Maurice publisher pits
 

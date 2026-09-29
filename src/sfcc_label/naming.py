@@ -21,6 +21,7 @@ SOURCE_CODES = {
     "dryden": "dryden", "ismn": "ismn", "local": "local", "nrcan_ibutton": "nrcan",
     "st_marthe_maurice": "smm", "tvc_boike": "tvcb", "tvc_hydraprobe": "tvch",
     "james_bay": "jbay", "montmorency": "mont", "kuujjuarapik": "kuuj",
+    "usarray_ground": "usar", "ak_profiles": "akpr", "above_moisture": "abvm",
 }
 SENSOR_ID = re.compile(r"^[a-z0-9-]+(_[a-z0-9-]+){3}$")
 

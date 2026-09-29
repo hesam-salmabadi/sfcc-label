@@ -78,7 +78,7 @@ Code: `https://github.com/hesam-salmabadi/sfcc-label` (`src/sfcc_label/`,
 | NRCan Open File 66 iButtons (`nrcan_ibutton`) | `nrcan` | 107 | 107 | 68.3–69.4 | 13 | 2016-08-17 – 2017-08-22 | 219,019 | 0 | T |
 | Local network and partners (`local`) | `local` | 69 | 69 | 47.3–58.2 | 5 | 2014-08-01 – 2024-06-30 | 1,525,340 | 1,387,157 | T, SM, bulk EDC |
 | Cambridge Bay iButtons (`cambridge_bay`) | `cbay` | 64 | 16 | 69.2 | 0–28 | 2018-07-27 – 2020-09-16 | 191,008 | 0 | T |
-| Chapleau (`chapleau`) | `chap` | 60 | 4 | 47.6–47.9 | 6–30 (T); 0–10, 0–18 (SM) | 2017-05-18 – 2023-01-01 | 500,919 | 1,758,361 | T or SM (+ CS616 period) |
+| Chapleau (`chapleau`) | `chap` | 60 | 4 | 47.6–47.9 | 6–30 (T); 0–10, 0–18 (SM) | 2017-05-18 – 2023-01-01 | 450,517 | 1,758,664 | T or SM (+ CS616 period) |
 | Montmorency transect (`montmorency`) | `mont` | 36 | 19 | 47.3–47.4 | 0, 5 | 2019-10-29 – 2023-06-18 | 211,992 | 0 | T |
 | BERMS OBS/OJP (`berms`) | `berms` | 28 | 2 | 53.9–54.0 | 2–100 (T); intervals to 150 (SM) | 2015-01-01 – 2022-01-01 | 667,680 | 617,769 | T or SM |
 | James Bay transect (`james_bay`) | `jbay` | 28 | 14 | 53.2–53.4 | 0, 5 | 2014-09-04 – 2022-08-29 | 576,223 | 0 | T |
@@ -169,8 +169,9 @@ Each source has its own importer (`src/sfcc_label/<source>.py`, CLI
 `sfcc-label import-…`). Common rules:
 
 - Convert every timestamp to UTC and aggregate to hourly means; no
-  interpolation. Documented source clocks are used (AmeriFlux BIF `UTC_OFFSET`,
-  `America/Toronto` for NRCan and Chapleau moisture); where a source clock is
+  interpolation. Source clock definitions are used when available (AmeriFlux
+  BIF `UTC_OFFSET`, `America/Toronto` for NRCan). Chapleau uses inferred fixed
+  UTC−5; where a source clock is
   assumed rather than proven, the assumption is written to `timezone_original`
   and the context file.
 - Convert moisture to m³ m⁻³ (percent ÷ 100) and map source missing markers
